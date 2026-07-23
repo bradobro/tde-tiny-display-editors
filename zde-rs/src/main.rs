@@ -40,6 +40,7 @@ mod screen;
 mod search;
 
 use std::io;
+use std::path::Path;
 
 use editor::Editor;
 use keyboard::CrosstermKeys;
@@ -68,7 +69,15 @@ fn main() {
     install_panic_hook();
 
     let mut editor = Editor::new(cfg);
-    // TODO(iter 0501): argv filename -> load into `editor` (new file if absent).
+    // ASM `Edit`/`LoadIt` (`zde17.asm:334`,`6212`): an argv filename opens
+    // that file, or starts a new (empty) buffer under that name if it
+    // doesn't exist yet. No filename at all just starts a blank, unnamed buffer.
+    if let Some(path) = std::env::args().nth(1)
+        && let Err(e) = filesystem::load_into(&mut editor, Path::new(&path))
+    {
+        eprintln!("zde-rs: failed to load {path}: {e}");
+        return;
+    }
 
     let mut screen = CrosstermScreen::new();
     if let Err(e) = screen.enter() {

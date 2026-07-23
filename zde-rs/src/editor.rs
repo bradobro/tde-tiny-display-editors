@@ -26,10 +26,12 @@
 //! hyphenation) and only gets a friendly message, never a real implementation.
 
 use std::io;
+use std::path::Path;
 
 use crate::block::Block;
 use crate::buffer::GapBuffer;
 use crate::config::Config;
+use crate::filesystem;
 use crate::help::{self, Menu};
 use crate::keyboard::{Key, KeySource};
 use crate::screen::{self, HeaderInfo, Screen};
@@ -325,7 +327,7 @@ impl Editor {
         let key2 = keys.next_key()?;
         let result = match menu {
             // ESC is a synonym prefix for the block family (ASM `CKSyn` default).
-            Menu::Block | Menu::Escape => self.dispatch_block(key2),
+            Menu::Block | Menu::Escape => self.dispatch_block(key2, keys, screen)?,
             Menu::Quick => self.dispatch_quick(key2),
             Menu::OnScreen => self.dispatch_onscreen(key2),
             Menu::Main => unreachable!("Main is never itself a prefix"),
@@ -343,8 +345,8 @@ impl Editor {
     }
 
     /// `^K` block-family table (`KMnuSt`, `zde17.asm:479`).
-    fn dispatch_block(&mut self, key: Key) -> CommandResult {
-        match key {
+    fn dispatch_block(&mut self, key: Key, keys: &mut dyn KeySource, screen: &mut dyn Screen) -> io::Result<CommandResult> {
+        Ok(match key {
             Key::Ctrl(b'H') => self.cmd_show_help(Menu::Block),
             Key::Esc | Key::Char(' ') => CommandResult::Continue(RedrawHint::CursorOnly),
             Key::Ctrl(b'B') => self.cmd_unsupported("mark block start"),
@@ -355,18 +357,16 @@ impl Editor {
             Key::Ctrl(b'Y') => self.cmd_unsupported("erase block"),
             Key::Ctrl(b'R') => self.cmd_unsupported("read file at cursor"),
             Key::Ctrl(b'W') => self.cmd_unsupported("write block to file"),
-            Key::Ctrl(b'L') => self.cmd_unsupported("load file"),
-            Key::Ctrl(b'S') => self.cmd_unsupported("save file"),
-            Key::Ctrl(b'N') => self.cmd_unsupported("change file name"),
-            Key::Ctrl(b'X') => self.cmd_unsupported("save & exit"),
-            Key::Ctrl(b'D') => self.cmd_unsupported("save & load new"),
-            // `Quit` (`zde17.asm:720`): no save-confirmation prompt yet (that
-            // needs load/save from epic 0500), so this just exits the loop.
-            Key::Ctrl(b'Q') => CommandResult::Quit,
+            Key::Ctrl(b'L') => return self.cmd_load(keys, screen),
+            Key::Ctrl(b'S') => self.cmd_save(),
+            Key::Ctrl(b'N') => return self.cmd_change_name(keys, screen),
+            Key::Ctrl(b'X') => self.cmd_save_exit(),
+            Key::Ctrl(b'D') => return self.cmd_save_new(keys, screen),
+            Key::Ctrl(b'Q') => return self.cmd_quit(keys, screen),
             Key::Ctrl(b'F') => self.cmd_deferred("directory view"),
             Key::Ctrl(b'P') => self.cmd_dropped("printing"),
             _ => self.cmd_unsupported("block command"),
-        }
+        })
     }
 
     /// `^Q` quick-movement/find table (`QMnuSt`, `zde17.asm:632`).
@@ -488,6 +488,134 @@ impl Editor {
     fn cmd_dropped(&mut self, what: &str) -> CommandResult {
         self.message = Some(format!("{what}: not supported in this port (see doc/adr/0004)"));
         CommandResult::Continue(RedrawHint::Full)
+    }
+
+    /// Read a line of text at the prompt row, echoing as the user types
+    /// (ASM `NewNam`/`Prompt`, `zde17.asm:5022`/`6954`). Enter accepts; Esc
+    /// cancels (`None`); Backspace/Del edit the line in progress.
+    fn read_line(&self, screen: &mut dyn Screen, keys: &mut dyn KeySource, prompt: &str) -> io::Result<Option<String>> {
+        let row = self.cfg.screen_lines as usize + 2;
+        let mut buf = String::new();
+        loop {
+            screen.move_to(row as u16, 0)?;
+            screen.clear_line()?;
+            screen.write_str(&format!("{prompt}{buf}"))?;
+            screen.flush()?;
+            match keys.next_key()? {
+                Key::Char('\r') => return Ok(Some(buf)),
+                Key::Esc => return Ok(None),
+                Key::Backspace | Key::Del => {
+                    buf.pop();
+                }
+                Key::Char(c) => buf.push(c),
+                _ => {}
+            }
+        }
+    }
+
+    /// Ask a Y/N question at the prompt row (ASM `Confrm`, `zde17.asm:911`).
+    /// Loops until a clear Y or N; Esc counts as "no" (matching the ASM's
+    /// escape-to-cancel).
+    fn confirm(&self, screen: &mut dyn Screen, keys: &mut dyn KeySource, prompt: &str) -> io::Result<bool> {
+        let row = self.cfg.screen_lines as usize + 2;
+        screen.move_to(row as u16, 0)?;
+        screen.clear_line()?;
+        screen.write_str(prompt)?;
+        screen.flush()?;
+        loop {
+            match keys.next_key()? {
+                Key::Char(c) if c.eq_ignore_ascii_case(&'y') => return Ok(true),
+                Key::Char(c) if c.eq_ignore_ascii_case(&'n') => return Ok(false),
+                Key::Esc => return Ok(false),
+                _ => {}
+            }
+        }
+    }
+
+    /// Save to the current filename, setting `message` to the result either
+    /// way (ASM `Save`, `zde17.asm:4905`). Returns whether it succeeded, so
+    /// callers that chain a save (`^K X`, `^K D`) know whether to continue.
+    fn save_current(&mut self) -> bool {
+        match filesystem::save(self) {
+            Ok(()) => {
+                self.message = Some("saved".to_string());
+                true
+            }
+            Err(e) => {
+                self.message = Some(format!("save failed: {e}"));
+                false
+            }
+        }
+    }
+
+    /// Save to the current filename (`^K S` = `Save`, `zde17.asm:4905`).
+    /// Simplification: the ASM prompts inline for a name here if none is set
+    /// yet; this port asks the user to `^K N` (change name) first instead,
+    /// since that already owns the interactive-prompt flow.
+    fn cmd_save(&mut self) -> CommandResult {
+        self.save_current();
+        CommandResult::Continue(RedrawHint::Full)
+    }
+
+    /// Save then quit (`^K X` = `Exit`, `zde17.asm:708`). A failed save
+    /// leaves the editor open with the error shown, matching the ASM's
+    /// `RET NZ` (don't quit if the save didn't work).
+    fn cmd_save_exit(&mut self) -> CommandResult {
+        if self.save_current() {
+            CommandResult::Quit
+        } else {
+            CommandResult::Continue(RedrawHint::Full)
+        }
+    }
+
+    /// Change the target filename without saving (`^K N` = `ChgNam`,
+    /// `zde17.asm:5011`).
+    fn cmd_change_name(&mut self, keys: &mut dyn KeySource, screen: &mut dyn Screen) -> io::Result<CommandResult> {
+        let Some(name) = self.read_line(screen, keys, "Name: ")? else {
+            return Ok(CommandResult::Continue(RedrawHint::Full));
+        };
+        self.filename = Some(name);
+        Ok(CommandResult::Continue(RedrawHint::Full))
+    }
+
+    /// Load a different file, discarding the current buffer (`^K L` =
+    /// `Load`, `zde17.asm:4842`, which hands off to `Restrt`'s rename+load).
+    /// Confirms first if there are unsaved changes; Esc at either prompt
+    /// cancels and leaves the current file untouched.
+    fn cmd_load(&mut self, keys: &mut dyn KeySource, screen: &mut dyn Screen) -> io::Result<CommandResult> {
+        if self.modified && !self.confirm(screen, keys, "Abandon changes? (Y/N):")? {
+            self.message = Some("load cancelled".to_string());
+            return Ok(CommandResult::Continue(RedrawHint::Full));
+        }
+        let Some(name) = self.read_line(screen, keys, "Load: ")? else {
+            self.message = Some("load cancelled".to_string());
+            return Ok(CommandResult::Continue(RedrawHint::Full));
+        };
+        filesystem::load_into(self, Path::new(&name))?;
+        Ok(CommandResult::Continue(RedrawHint::Full))
+    }
+
+    /// Save, then start a new file (`^K D` = `Done`, `zde17.asm:714`,
+    /// hands off to `Restrt` same as `Load`). Only prompts for the new name
+    /// once the save has actually succeeded.
+    fn cmd_save_new(&mut self, keys: &mut dyn KeySource, screen: &mut dyn Screen) -> io::Result<CommandResult> {
+        if !self.save_current() {
+            return Ok(CommandResult::Continue(RedrawHint::Full));
+        }
+        let Some(name) = self.read_line(screen, keys, "New file: ")? else {
+            return Ok(CommandResult::Continue(RedrawHint::Full));
+        };
+        filesystem::load_into(self, Path::new(&name))?;
+        Ok(CommandResult::Continue(RedrawHint::Full))
+    }
+
+    /// Quit, confirming first if there are unsaved changes (`^K Q` = `Quit`,
+    /// `zde17.asm:720`). Never saves.
+    fn cmd_quit(&mut self, keys: &mut dyn KeySource, screen: &mut dyn Screen) -> io::Result<CommandResult> {
+        if self.modified && !self.confirm(screen, keys, "Abandon changes? (Y/N):")? {
+            return Ok(CommandResult::Continue(RedrawHint::Full));
+        }
+        Ok(CommandResult::Quit)
     }
 
     /// Delete the char left of the cursor (`DEL`/backspace, ASM `Delete`,
@@ -876,6 +1004,7 @@ mod tests {
             Key::Char('i'),
             Key::Ctrl(b'K'),
             Key::Ctrl(b'Q'), // ^KQ = quit
+            Key::Char('y'),  // confirm discarding the unsaved "hi"
         ]);
         ed.run(&mut screen, &mut keys).unwrap();
         assert_eq!(ed.buffer.chars().collect::<String>(), "hi");
@@ -904,7 +1033,9 @@ mod tests {
     #[test]
     fn unmapped_block_key_sets_an_unsupported_message() {
         let mut ed = Editor::new(Config::default());
-        let result = ed.dispatch_block(Key::Ctrl(b'B'));
+        let mut screen = FakeScreen::new();
+        let mut keys = ScriptedKeys::new(vec![]);
+        let result = ed.dispatch_block(Key::Ctrl(b'B'), &mut keys, &mut screen).unwrap();
         assert_eq!(result, CommandResult::Continue(RedrawHint::Full));
         assert!(ed.message.unwrap().contains("not implemented"));
     }
@@ -1104,5 +1235,139 @@ mod tests {
         ed.cmd_make_top();
         assert_eq!(ed.top_offset, 4); // start of line "2"
         assert_eq!(ed.buffer.cursor(), 4); // cursor untouched
+    }
+
+    /// A unique scratch path per test, cleaned up on drop (mirrors the
+    /// `filesystem` module's own test helper).
+    struct TempFile(std::path::PathBuf);
+
+    impl TempFile {
+        fn new(name: &str) -> Self {
+            TempFile(std::env::temp_dir().join(format!("zde-rs-editor-test-{name}-{}", std::process::id())))
+        }
+    }
+
+    impl Drop for TempFile {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_file(&self.0);
+            let _ = std::fs::remove_file(self.0.with_extension("bak"));
+        }
+    }
+
+    #[test]
+    fn change_name_sets_filename_without_saving() {
+        let mut ed = Editor::new(Config::default());
+        let mut screen = FakeScreen::new();
+        let mut keys = ScriptedKeys::new(vec![
+            Key::Char('f'),
+            Key::Char('o'),
+            Key::Char('o'),
+            Key::Char('\r'),
+        ]);
+        let result = ed.cmd_change_name(&mut keys, &mut screen).unwrap();
+        assert_eq!(result, CommandResult::Continue(RedrawHint::Full));
+        assert_eq!(ed.filename.as_deref(), Some("foo"));
+        assert!(!ed.modified);
+    }
+
+    #[test]
+    fn change_name_cancelled_with_esc_leaves_filename_untouched() {
+        let mut ed = Editor::new(Config::default());
+        ed.filename = Some("original".to_string());
+        let mut screen = FakeScreen::new();
+        let mut keys = ScriptedKeys::new(vec![Key::Char('x'), Key::Esc]);
+        ed.cmd_change_name(&mut keys, &mut screen).unwrap();
+        assert_eq!(ed.filename.as_deref(), Some("original"));
+    }
+
+    #[test]
+    fn save_without_filename_reports_an_error() {
+        let mut ed = Editor::new(Config::default());
+        let result = ed.cmd_save();
+        assert_eq!(result, CommandResult::Continue(RedrawHint::Full));
+        assert!(ed.message.unwrap().contains("no filename"));
+    }
+
+    #[test]
+    fn save_writes_the_buffer_and_clears_modified() {
+        let f = TempFile::new("save");
+        let mut ed = Editor::new(Config::default());
+        ed.filename = Some(f.0.to_str().unwrap().to_string());
+        ed.buffer = GapBuffer::from_str("hello");
+        ed.modified = true;
+        ed.cmd_save();
+        assert!(!ed.modified);
+        assert_eq!(std::fs::read_to_string(&f.0).unwrap(), "hello");
+    }
+
+    #[test]
+    fn save_exit_quits_only_on_a_successful_save() {
+        let f = TempFile::new("save-exit");
+        let mut ed = Editor::new(Config::default());
+        ed.filename = Some(f.0.to_str().unwrap().to_string());
+        ed.buffer = GapBuffer::from_str("bye");
+        assert_eq!(ed.cmd_save_exit(), CommandResult::Quit);
+
+        let mut ed_no_name = Editor::new(Config::default());
+        assert_eq!(
+            ed_no_name.cmd_save_exit(),
+            CommandResult::Continue(RedrawHint::Full)
+        );
+    }
+
+    #[test]
+    fn quit_skips_confirmation_when_unmodified() {
+        let mut ed = Editor::new(Config::default());
+        let mut screen = FakeScreen::new();
+        let mut keys = ScriptedKeys::new(vec![]); // would panic if confirm() ran
+        let result = ed.cmd_quit(&mut keys, &mut screen).unwrap();
+        assert_eq!(result, CommandResult::Quit);
+    }
+
+    #[test]
+    fn quit_cancels_when_modified_and_answer_is_no() {
+        let mut ed = Editor::new(Config::default());
+        ed.modified = true;
+        let mut screen = FakeScreen::new();
+        let mut keys = ScriptedKeys::new(vec![Key::Char('n')]);
+        let result = ed.cmd_quit(&mut keys, &mut screen).unwrap();
+        assert_eq!(result, CommandResult::Continue(RedrawHint::Full));
+    }
+
+    #[test]
+    fn quit_proceeds_when_modified_and_answer_is_yes() {
+        let mut ed = Editor::new(Config::default());
+        ed.modified = true;
+        let mut screen = FakeScreen::new();
+        let mut keys = ScriptedKeys::new(vec![Key::Char('y')]);
+        let result = ed.cmd_quit(&mut keys, &mut screen).unwrap();
+        assert_eq!(result, CommandResult::Quit);
+    }
+
+    #[test]
+    fn load_replaces_the_buffer_with_the_named_files_content() {
+        let f = TempFile::new("load");
+        std::fs::write(&f.0, "loaded text").unwrap();
+        let mut ed = Editor::new(Config::default());
+        ed.buffer = GapBuffer::from_str("stale content");
+        let mut screen = FakeScreen::new();
+        let path_str = f.0.to_str().unwrap().to_string();
+        let mut keys = ScriptedKeys::new(path_str.chars().map(Key::Char).chain([Key::Char('\r')]).collect());
+        let result = ed.cmd_load(&mut keys, &mut screen).unwrap();
+        assert_eq!(result, CommandResult::Continue(RedrawHint::Full));
+        assert_eq!(ed.buffer.chars().collect::<String>(), "loaded text");
+        assert_eq!(ed.filename.as_deref(), Some(path_str.as_str()));
+    }
+
+    #[test]
+    fn load_confirms_before_discarding_unsaved_changes() {
+        let mut ed = Editor::new(Config::default());
+        ed.buffer = GapBuffer::from_str("unsaved");
+        ed.modified = true;
+        let mut screen = FakeScreen::new();
+        let mut keys = ScriptedKeys::new(vec![Key::Char('n')]); // decline
+        let result = ed.cmd_load(&mut keys, &mut screen).unwrap();
+        assert_eq!(result, CommandResult::Continue(RedrawHint::Full));
+        assert_eq!(ed.buffer.chars().collect::<String>(), "unsaved"); // untouched
     }
 }
