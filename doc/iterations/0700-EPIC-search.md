@@ -1,6 +1,6 @@
 # Epic 0700 — Search & Replace
 
-Status: ready
+Status: done
 
 ## Goal
 

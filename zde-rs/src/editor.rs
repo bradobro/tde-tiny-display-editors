@@ -36,7 +36,7 @@ use crate::format::{self, WrapDecision};
 use crate::help::{self, Menu};
 use crate::keyboard::{Key, KeySource};
 use crate::screen::{self, HeaderInfo, Screen};
-use crate::search::Query;
+use crate::search::{self, Query};
 
 /// Insert vs. overtype. ASM `InsFlg`/`SavIns` (`zde17.asm:144`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -303,7 +303,7 @@ impl Editor {
             Key::Ctrl(b'I') => self.cmd_tab(),
             Key::Ctrl(b'J') => self.cmd_show_help(Menu::Main),
             Key::Ctrl(b'K') => return self.dispatch_prefix(Menu::Block, keys, screen),
-            Key::Ctrl(b'L') | Key::Ctrl(b'\\') => self.cmd_unsupported("repeat find"),
+            Key::Ctrl(b'L') | Key::Ctrl(b'\\') => return self.cmd_repeat_find(keys, screen),
             Key::Ctrl(b'O') => return self.dispatch_prefix(Menu::OnScreen, keys, screen),
             Key::Ctrl(b'P') => self.cmd_unsupported("literal control char"),
             Key::Ctrl(b'Q') => return self.dispatch_prefix(Menu::Quick, keys, screen),
@@ -329,7 +329,7 @@ impl Editor {
         let result = match menu {
             // ESC is a synonym prefix for the block family (ASM `CKSyn` default).
             Menu::Block | Menu::Escape => self.dispatch_block(key2, keys, screen)?,
-            Menu::Quick => self.dispatch_quick(key2),
+            Menu::Quick => self.dispatch_quick(key2, keys, screen)?,
             Menu::OnScreen => self.dispatch_onscreen(key2, keys, screen)?,
             Menu::Main => unreachable!("Main is never itself a prefix"),
         };
@@ -371,16 +371,16 @@ impl Editor {
     }
 
     /// `^Q` quick-movement/find table (`QMnuSt`, `zde17.asm:632`).
-    fn dispatch_quick(&mut self, key: Key) -> CommandResult {
-        match key {
+    fn dispatch_quick(&mut self, key: Key, keys: &mut dyn KeySource, screen: &mut dyn Screen) -> io::Result<CommandResult> {
+        Ok(match key {
             Key::Esc | Key::Char(' ') => CommandResult::Continue(RedrawHint::CursorOnly),
             Key::Left => self.cmd_line_start(),
             Key::Right => self.cmd_line_end(),
             Key::Up => self.cmd_screen_top(),
             Key::Down => self.cmd_screen_bottom(),
             Key::Del => self.cmd_erase_bol(),
-            Key::Ctrl(b'F') => self.cmd_unsupported("find"),
-            Key::Ctrl(b'A') => self.cmd_unsupported("replace"),
+            Key::Ctrl(b'F') => return self.cmd_find(keys, screen),
+            Key::Ctrl(b'A') => return self.cmd_replace(keys, screen),
             Key::Ctrl(b'R') => self.cmd_top(),
             Key::Ctrl(b'C') => self.cmd_bottom(),
             Key::Ctrl(b'S') => self.cmd_line_start(),
@@ -390,7 +390,7 @@ impl Editor {
             Key::Ctrl(b'U') => self.cmd_undelete(),
             Key::Ctrl(b'Y') => self.cmd_erase_eol(),
             _ => self.cmd_unsupported("quick command"),
-        }
+        })
     }
 
     /// `^O` onscreen toggles/margins table (`OMnuSt`, `zde17.asm:577`).
@@ -706,6 +706,111 @@ impl Editor {
                 _ => {}
             }
         }
+    }
+
+    /// `^QF` — prompt for a search string and jump to its next (or, with
+    /// `query.backward` set, previous) occurrence (ASM `Find`, `zde17.asm:3353`).
+    /// An empty search string is treated as a cancel, same as Esc.
+    fn cmd_find(&mut self, keys: &mut dyn KeySource, screen: &mut dyn Screen) -> io::Result<CommandResult> {
+        let Some(input) = self.read_line(screen, keys, "Find: ")? else {
+            return Ok(CommandResult::Continue(RedrawHint::Full));
+        };
+        if input.is_empty() {
+            return Ok(CommandResult::Continue(RedrawHint::Full));
+        }
+        self.query.find = input.chars().collect();
+        self.query.replace = None;
+        Ok(self.run_find())
+    }
+
+    /// Run `self.query` as a plain find from the cursor, moving the cursor to
+    /// the match (or reporting "not found"). Forward search starts just past
+    /// the cursor and backward search starts just before it, so repeat-find
+    /// (`^L`) never re-matches the position it's already sitting on.
+    fn run_find(&mut self) -> CommandResult {
+        let cursor = self.buffer.cursor();
+        let from = if self.query.backward { cursor } else { cursor + 1 };
+        match search::find_from(&self.buffer, from, &self.query) {
+            Some(pos) => {
+                self.buffer.move_to(pos);
+                self.message = Some("found".to_string());
+            }
+            None => self.message = Some("not found".to_string()),
+        }
+        CommandResult::Continue(RedrawHint::Full)
+    }
+
+    /// `^QA` — prompt for a search string and its replacement, then run the
+    /// replace (ASM `Rplace`, `zde17.asm:3737`). Simplification: unlike the
+    /// ASM, this port always scans forward regardless of `query.backward` —
+    /// `backward` only affects plain Find (`^QF`) — since a global replace
+    /// scanning from the top is the common case and a backward interactive
+    /// replace adds complexity (moving the cursor back past matches already
+    /// confirmed) for a rarely-used mode.
+    fn cmd_replace(&mut self, keys: &mut dyn KeySource, screen: &mut dyn Screen) -> io::Result<CommandResult> {
+        let Some(find) = self.read_line(screen, keys, "Find: ")? else {
+            return Ok(CommandResult::Continue(RedrawHint::Full));
+        };
+        if find.is_empty() {
+            return Ok(CommandResult::Continue(RedrawHint::Full));
+        }
+        let Some(replace) = self.read_line(screen, keys, "Replace with: ")? else {
+            return Ok(CommandResult::Continue(RedrawHint::Full));
+        };
+        self.query.find = find.chars().collect();
+        self.query.replace = Some(replace.chars().collect());
+        self.run_replace(keys, screen)
+    }
+
+    /// `^L`/`^\` — repeat the last find or replace (ASM `Repeat`,
+    /// `zde17.asm:3776`). Re-runs a replace if the last operation was one
+    /// (`query.replace.is_some()`), otherwise repeats the plain find —
+    /// matching `Repeat`'s dispatch through `RepFCh`, which checks `ChgFlg`
+    /// (the "this is a change operation" flag) the same way.
+    fn cmd_repeat_find(&mut self, keys: &mut dyn KeySource, screen: &mut dyn Screen) -> io::Result<CommandResult> {
+        if self.query.find.is_empty() {
+            return Ok(self.cmd_unsupported("no previous find"));
+        }
+        if self.query.replace.is_some() {
+            self.run_replace(keys, screen)
+        } else {
+            Ok(self.run_find())
+        }
+    }
+
+    /// Replace every match of `query.find` from the cursor (or, when
+    /// `query.global`, from the start of the buffer) to the end, replacing
+    /// each without prompting if `query.global`, otherwise confirming each
+    /// match first (ASM `RplLp`/`YesNo`, `zde17.asm:3765`,`3800`).
+    /// Simplification: this port's `confirm` only distinguishes Y from
+    /// N/Esc (`^KY` Esc just declines that match and moves on), rather than
+    /// the ASM's four-way Y/N/Esc-abort/`*`-replace-all-remaining prompt —
+    /// `query.global` (set before calling, e.g. by a future `*` binding) is
+    /// this port's equivalent of the ASM's "switch to global" escape hatch.
+    fn run_replace(&mut self, keys: &mut dyn KeySource, screen: &mut dyn Screen) -> io::Result<CommandResult> {
+        let mut from = if self.query.global { 0 } else { self.buffer.cursor() };
+        let matched_len = self.query.find.len();
+        let mut count = 0;
+        while let Some(pos) = search::find_from(&self.buffer, from, &self.query) {
+            self.buffer.move_to(pos);
+            let do_replace = self.query.global || self.confirm(screen, keys, "Replace? (Y/N): ")?;
+            if do_replace {
+                for _ in 0..matched_len {
+                    self.buffer.delete_right();
+                }
+                let replacement = self.query.replace.clone().unwrap_or_default();
+                for c in &replacement {
+                    self.buffer.insert_char(*c);
+                }
+                count += 1;
+                from = pos + replacement.len();
+            } else {
+                from = pos + matched_len.max(1);
+            }
+        }
+        self.modified |= count > 0;
+        self.message = Some(format!("{count} replaced"));
+        Ok(CommandResult::Continue(RedrawHint::Full))
     }
 
     /// Save to the current filename, setting `message` to the result either
@@ -1379,6 +1484,96 @@ mod tests {
         ed.cmd_set_margin(&mut keys, &mut screen, "Right margin: ", false).unwrap();
         assert_eq!(ed.cfg.right_margin, original);
         assert!(ed.message.unwrap().contains("not a column number"));
+    }
+
+    fn keys_for(s: &str) -> Vec<Key> {
+        s.chars().map(Key::Char).chain(std::iter::once(Key::Char('\r'))).collect()
+    }
+
+    #[test]
+    fn find_moves_the_cursor_to_the_next_match() {
+        let mut ed = editor_with("the quick brown fox", 0);
+        let mut screen = FakeScreen::new();
+        let mut keys = ScriptedKeys::new(keys_for("brown"));
+        ed.cmd_find(&mut keys, &mut screen).unwrap();
+        assert_eq!(ed.buffer.cursor(), 10);
+        assert_eq!(ed.message.unwrap(), "found");
+    }
+
+    #[test]
+    fn find_reports_not_found_and_leaves_the_cursor() {
+        let mut ed = editor_with("the quick brown fox", 3);
+        let mut screen = FakeScreen::new();
+        let mut keys = ScriptedKeys::new(keys_for("xyz"));
+        ed.cmd_find(&mut keys, &mut screen).unwrap();
+        assert_eq!(ed.buffer.cursor(), 3);
+        assert_eq!(ed.message.unwrap(), "not found");
+    }
+
+    #[test]
+    fn repeat_find_finds_the_next_occurrence_past_the_last_match() {
+        let mut ed = editor_with("aa aa aa", 0);
+        let mut screen = FakeScreen::new();
+        let mut keys = ScriptedKeys::new(keys_for("aa"));
+        ed.cmd_find(&mut keys, &mut screen).unwrap();
+        assert_eq!(ed.buffer.cursor(), 3);
+        ed.cmd_repeat_find(&mut keys, &mut screen).unwrap();
+        assert_eq!(ed.buffer.cursor(), 6);
+    }
+
+    #[test]
+    fn repeat_find_is_a_no_op_with_no_previous_query() {
+        let mut ed = editor_with("abc", 0);
+        let mut screen = FakeScreen::new();
+        let mut keys = ScriptedKeys::new(vec![]);
+        let result = ed.cmd_repeat_find(&mut keys, &mut screen).unwrap();
+        assert_eq!(result, CommandResult::Continue(RedrawHint::Full));
+        assert!(ed.message.unwrap().contains("no previous find"));
+    }
+
+    #[test]
+    fn replace_confirms_each_match_and_only_changes_accepted_ones() {
+        let mut ed = editor_with("cat cat cat", 0);
+        let mut screen = FakeScreen::new();
+        let mut script = keys_for("cat");
+        script.extend(keys_for("dog"));
+        script.extend(vec![Key::Char('n'), Key::Char('y'), Key::Char('n')]);
+        let mut keys = ScriptedKeys::new(script);
+        ed.cmd_replace(&mut keys, &mut screen).unwrap();
+        assert_eq!(ed.buffer.chars().collect::<String>(), "cat dog cat");
+        assert!(ed.message.unwrap().contains("1 replaced"));
+    }
+
+    #[test]
+    fn global_replace_changes_every_match_without_prompting() {
+        let mut ed = editor_with("cat cat cat", 0);
+        ed.query.global = true;
+        let mut screen = FakeScreen::new();
+        let mut script = keys_for("cat");
+        script.extend(keys_for("dog"));
+        let mut keys = ScriptedKeys::new(script);
+        ed.cmd_replace(&mut keys, &mut screen).unwrap();
+        assert_eq!(ed.buffer.chars().collect::<String>(), "dog dog dog");
+        assert!(ed.message.unwrap().contains("3 replaced"));
+    }
+
+    #[test]
+    fn repeat_find_reruns_the_last_replace_as_a_fresh_operation() {
+        let mut ed = editor_with("cat", 0);
+        let mut screen = FakeScreen::new();
+        let mut script = keys_for("cat");
+        script.extend(keys_for("dog"));
+        script.push(Key::Char('n')); // decline the only match this time
+        let mut keys = ScriptedKeys::new(script);
+        ed.cmd_replace(&mut keys, &mut screen).unwrap();
+        assert_eq!(ed.buffer.chars().collect::<String>(), "cat");
+        assert!(ed.message.as_ref().unwrap().contains("0 replaced"));
+
+        ed.buffer.move_to(0);
+        let mut keys = ScriptedKeys::new(vec![Key::Char('y')]); // accept it this time
+        ed.cmd_repeat_find(&mut keys, &mut screen).unwrap();
+        assert_eq!(ed.buffer.chars().collect::<String>(), "dog");
+        assert!(ed.message.unwrap().contains("1 replaced"));
     }
 
     /// Build an editor over `text` with the cursor at `cursor`, orienting so
