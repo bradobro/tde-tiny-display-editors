@@ -350,14 +350,14 @@ impl Editor {
         Ok(match key {
             Key::Ctrl(b'H') => self.cmd_show_help(Menu::Block),
             Key::Esc | Key::Char(' ') => CommandResult::Continue(RedrawHint::CursorOnly),
-            Key::Ctrl(b'B') => self.cmd_unsupported("mark block start"),
-            Key::Ctrl(b'K') => self.cmd_unsupported("mark block end"),
-            Key::Ctrl(b'U') => self.cmd_unsupported("unmark block"),
-            Key::Ctrl(b'C') => self.cmd_unsupported("copy block"),
-            Key::Ctrl(b'V') => self.cmd_unsupported("move block"),
-            Key::Ctrl(b'Y') => self.cmd_unsupported("erase block"),
-            Key::Ctrl(b'R') => self.cmd_unsupported("read file at cursor"),
-            Key::Ctrl(b'W') => self.cmd_unsupported("write block to file"),
+            Key::Ctrl(b'B') => self.cmd_mark_block_start(),
+            Key::Ctrl(b'K') => self.cmd_mark_block_end(),
+            Key::Ctrl(b'U') => self.cmd_unmark_block(),
+            Key::Ctrl(b'C') => self.cmd_copy_block(),
+            Key::Ctrl(b'V') => self.cmd_move_block(),
+            Key::Ctrl(b'Y') => self.cmd_erase_block(),
+            Key::Ctrl(b'R') => return self.cmd_read_file_at_cursor(keys, screen),
+            Key::Ctrl(b'W') => return self.cmd_write_block(keys, screen),
             Key::Ctrl(b'L') => return self.cmd_load(keys, screen),
             Key::Ctrl(b'S') => self.cmd_save(),
             Key::Ctrl(b'N') => return self.cmd_change_name(keys, screen),
@@ -368,6 +368,117 @@ impl Editor {
             Key::Ctrl(b'P') => self.cmd_dropped("printing"),
             _ => self.cmd_unsupported("block command"),
         })
+    }
+
+    /// `^KB` — mark the block's start at the cursor (ASM `Block`,
+    /// `zde17.asm:4420`). Re-marking just moves the start; the ASM's inline
+    /// marker bytes needed extra bookkeeping to remove stray earlier markers
+    /// that this port's plain `Option<usize>` doesn't (there's only ever one).
+    fn cmd_mark_block_start(&mut self) -> CommandResult {
+        self.block.start = Some(self.buffer.cursor());
+        CommandResult::Continue(RedrawHint::Full)
+    }
+
+    /// `^KK` — mark the block's end at the cursor (ASM `Termin`, `zde17.asm:4432`).
+    fn cmd_mark_block_end(&mut self) -> CommandResult {
+        self.block.end = Some(self.buffer.cursor());
+        CommandResult::Continue(RedrawHint::Full)
+    }
+
+    /// `^KU` — clear both endpoints (ASM `Unmark`, `zde17.asm:4438`).
+    fn cmd_unmark_block(&mut self) -> CommandResult {
+        self.block = Block::default();
+        CommandResult::Continue(RedrawHint::Full)
+    }
+
+    /// `^KC` — copy the marked block's text to the cursor (ASM `Copy`,
+    /// `zde17.asm:4606`). The cursor ends up just past the inserted copy,
+    /// same as the ASM.
+    fn cmd_copy_block(&mut self) -> CommandResult {
+        match self.copy_block_text() {
+            Ok(()) => CommandResult::Continue(RedrawHint::Full),
+            Err(msg) => {
+                self.message = Some(msg.to_string());
+                CommandResult::Continue(RedrawHint::Full)
+            }
+        }
+    }
+
+    /// The shared work behind `^KC` and `^KV`: insert a copy of the marked
+    /// block's text at the cursor. Errors (rather than silently no-op'ing)
+    /// if nothing is marked, or if the cursor sits inside the block being
+    /// copied — the ASM's `Error7` "straddle" check (`AND 82H` on `IsBlk`'s
+    /// result), simplified here to the direct `lo < cursor < hi` test this
+    /// port's offset-based `Block` makes trivial.
+    fn copy_block_text(&mut self) -> Result<(), &'static str> {
+        let (lo, hi) = self.block.span().ok_or("copy block: no block marked")?;
+        let cursor = self.buffer.cursor();
+        if cursor > lo && cursor < hi {
+            return Err("can't copy a block onto itself");
+        }
+        let text: String = (lo..hi).map(|i| self.buffer.char_at(i).expect("block span is within the document")).collect();
+        for c in text.chars() {
+            self.insert_char(c);
+        }
+        self.modified = true;
+        self.target_col = None;
+        Ok(())
+    }
+
+    /// `^KV` — move the marked block to the cursor (ASM `MovBlk`,
+    /// `zde17.asm:4652`: copy, then erase the original). Copying first means
+    /// `self.block`'s endpoints have already been nudged past the inserted
+    /// copy (via `insert_char`'s bookkeeping) by the time the erase runs, so
+    /// it deletes the original text rather than the copy just inserted.
+    fn cmd_move_block(&mut self) -> CommandResult {
+        match self.copy_block_text() {
+            Ok(()) => self.cmd_erase_block(),
+            Err(msg) => {
+                self.message = Some(msg.to_string());
+                CommandResult::Continue(RedrawHint::Full)
+            }
+        }
+    }
+
+    /// `^KY` — erase the marked block (ASM `EBlock`, `zde17.asm:4561`).
+    /// Leaves the block unmarked afterward, matching the ASM (the marker
+    /// bytes themselves were inside the erased span).
+    fn cmd_erase_block(&mut self) -> CommandResult {
+        let Some((lo, hi)) = self.block.span() else {
+            return self.cmd_unsupported("erase block (no block marked)");
+        };
+        self.buffer.move_to(lo);
+        for _ in lo..hi {
+            self.delete_right();
+        }
+        self.block = Block::default();
+        self.modified = true;
+        self.target_col = None;
+        CommandResult::Continue(RedrawHint::Full)
+    }
+
+    /// `^KW` — write the marked block's text to a file (ASM `Write`,
+    /// `zde17.asm:4943`).
+    fn cmd_write_block(&mut self, keys: &mut dyn KeySource, screen: &mut dyn Screen) -> io::Result<CommandResult> {
+        let Some(name) = self.read_line(screen, keys, "Write block to: ")? else {
+            return Ok(CommandResult::Continue(RedrawHint::Full));
+        };
+        match filesystem::write_block(self, Path::new(&name)) {
+            Ok(()) => self.message = Some("block written".to_string()),
+            Err(e) => self.message = Some(format!("write failed: {e}")),
+        }
+        Ok(CommandResult::Continue(RedrawHint::Full))
+    }
+
+    /// `^KR` — read a file's contents in at the cursor (ASM `Read`, `zde17.asm:4871`).
+    fn cmd_read_file_at_cursor(&mut self, keys: &mut dyn KeySource, screen: &mut dyn Screen) -> io::Result<CommandResult> {
+        let Some(name) = self.read_line(screen, keys, "Read file: ")? else {
+            return Ok(CommandResult::Continue(RedrawHint::Full));
+        };
+        if let Err(e) = filesystem::read_file_at_cursor(self, Path::new(&name)) {
+            self.message = Some(format!("read failed: {e}"));
+        }
+        Ok(CommandResult::Continue(RedrawHint::Full))
     }
 
     /// `^Q` quick-movement/find table (`QMnuSt`, `zde17.asm:632`).
@@ -417,11 +528,45 @@ impl Editor {
         })
     }
 
+    /// Insert `c` at the cursor. Every insertion in this editor goes through
+    /// here (rather than `self.buffer.insert_char` directly) so the marked
+    /// block's endpoints (`self.block`) stay correct as text shifts around
+    /// them — the ASM's block pointers get the same treatment inline,
+    /// scattered through its edit routines (e.g. `EChar`'s `BefCu`/`AftCu`
+    /// bookkeeping); this port centralizes it in one place instead.
+    pub(crate) fn insert_char(&mut self, c: char) {
+        let at = self.buffer.cursor();
+        self.buffer.insert_char(c);
+        self.block.adjust_insert(at, 1);
+    }
+
+    /// Delete the char left of the cursor, keeping `self.block` in sync (see
+    /// [`Editor::insert_char`]).
+    fn delete_left(&mut self) -> Option<char> {
+        let at = self.buffer.cursor();
+        let deleted = self.buffer.delete_left();
+        if deleted.is_some() {
+            self.block.adjust_delete(at - 1, 1);
+        }
+        deleted
+    }
+
+    /// Delete the char right of the cursor, keeping `self.block` in sync (see
+    /// [`Editor::insert_char`]).
+    fn delete_right(&mut self) -> Option<char> {
+        let at = self.buffer.cursor();
+        let deleted = self.buffer.delete_right();
+        if deleted.is_some() {
+            self.block.adjust_delete(at, 1);
+        }
+        deleted
+    }
+
     fn cmd_insert(&mut self, c: char) -> CommandResult {
         if self.insert == InsertMode::Overtype && self.buffer.char_at(self.buffer.cursor()).is_some_and(|ch| ch != '\n') {
-            self.buffer.delete_right();
+            self.delete_right();
         }
-        self.buffer.insert_char(c);
+        self.insert_char(c);
         self.modified = true;
         self.target_col = None;
         // ASM only checks wordwrap after an ordinary printing char, not a
@@ -440,12 +585,12 @@ impl Editor {
     /// so for now both behave identically.
     fn cmd_cr(&mut self, _open_line: bool) -> CommandResult {
         let indent = if self.auto_indent { self.leading_whitespace(self.buffer.cursor()) } else { String::new() };
-        self.buffer.insert_char('\n');
+        self.insert_char('\n');
         if self.double_space {
-            self.buffer.insert_char('\n');
+            self.insert_char('\n');
         }
         for c in indent.chars() {
-            self.buffer.insert_char(c);
+            self.insert_char(c);
         }
         self.modified = true;
         self.target_col = None;
@@ -478,8 +623,8 @@ impl Editor {
         let prefix: String = (line_start..cursor).map(|i| self.buffer.char_at(i).unwrap()).collect();
         let Some(break_at) = format::find_wrap_point(&prefix) else { return };
         self.buffer.move_to(line_start + break_at);
-        self.buffer.delete_right(); // the space the word was wrapping at
-        self.buffer.insert_char('\n');
+        self.delete_right(); // the space the word was wrapping at
+        self.insert_char('\n');
         let inserted = self.apply_left_margin();
         self.buffer.move_to(cursor + inserted);
         self.modified = true;
@@ -491,7 +636,7 @@ impl Editor {
     fn apply_left_margin(&mut self) -> usize {
         let n = (self.cfg.left_margin as usize).saturating_sub(1);
         for _ in 0..n {
-            self.buffer.insert_char(' ');
+            self.insert_char(' ');
         }
         n
     }
@@ -508,10 +653,10 @@ impl Editor {
         let reflowed = format::reflow_paragraph(&original, self.cfg.left_margin as usize, self.cfg.right_margin as usize);
         self.buffer.move_to(start);
         for _ in start..end {
-            self.buffer.delete_right();
+            self.delete_right();
         }
         for c in reflowed.chars() {
-            self.buffer.insert_char(c);
+            self.insert_char(c);
         }
         self.modified = true;
         CommandResult::Continue(RedrawHint::Full)
@@ -556,10 +701,10 @@ impl Editor {
         let centered = format::center_line(&text, self.cfg.left_margin as usize, self.cfg.right_margin as usize, flush_right);
         self.buffer.move_to(start);
         for _ in start..end {
-            self.buffer.delete_right();
+            self.delete_right();
         }
         for c in centered.chars() {
-            self.buffer.insert_char(c);
+            self.insert_char(c);
         }
         self.modified = true;
         CommandResult::Continue(RedrawHint::Full)
@@ -621,7 +766,7 @@ impl Editor {
             return CommandResult::Continue(RedrawHint::CursorOnly);
         };
         for _ in col..target {
-            self.buffer.insert_char(' ');
+            self.insert_char(' ');
         }
         self.modified = true;
         self.target_col = None;
@@ -796,11 +941,11 @@ impl Editor {
             let do_replace = self.query.global || self.confirm(screen, keys, "Replace? (Y/N): ")?;
             if do_replace {
                 for _ in 0..matched_len {
-                    self.buffer.delete_right();
+                    self.delete_right();
                 }
                 let replacement = self.query.replace.clone().unwrap_or_default();
                 for c in &replacement {
-                    self.buffer.insert_char(*c);
+                    self.insert_char(*c);
                 }
                 count += 1;
                 from = pos + replacement.len();
@@ -904,7 +1049,7 @@ impl Editor {
     /// `None` at the start of the document is a silent no-op, matching the
     /// ASM's `RET C` on `Left`'s error.
     fn cmd_delete_left(&mut self) -> CommandResult {
-        match self.buffer.delete_left() {
+        match self.delete_left() {
             Some(c) => self.record_char_delete(c),
             None => CommandResult::Continue(RedrawHint::CursorOnly),
         }
@@ -912,7 +1057,7 @@ impl Editor {
 
     /// Delete the char right of the cursor (`^G` = `EChar`, `zde17.asm:4287`).
     fn cmd_delete_right(&mut self) -> CommandResult {
-        match self.buffer.delete_right() {
+        match self.delete_right() {
             Some(c) => self.record_char_delete(c),
             None => CommandResult::Continue(RedrawHint::CursorOnly),
         }
@@ -940,12 +1085,12 @@ impl Editor {
         let mut deleted = String::new();
         if cur_is_word {
             while self.buffer.char_at(self.buffer.cursor()).is_some_and(|c| c != '\n' && is_word_char(c)) {
-                deleted.push(self.buffer.delete_right().unwrap());
+                deleted.push(self.delete_right().unwrap());
             }
         }
         if !began_mid_word {
             while self.buffer.char_at(self.buffer.cursor()).is_some_and(|c| c != '\n' && !is_word_char(c)) {
-                deleted.push(self.buffer.delete_right().unwrap());
+                deleted.push(self.delete_right().unwrap());
             }
         }
         if deleted.is_empty() {
@@ -961,7 +1106,7 @@ impl Editor {
     /// Shared by the line/end-of-line erase commands below.
     fn delete_span_right(&mut self, len: usize) -> CommandResult {
         let pos = self.buffer.cursor();
-        let deleted: String = (0..len).map(|_| self.buffer.delete_right().unwrap()).collect();
+        let deleted: String = (0..len).map(|_| self.delete_right().unwrap()).collect();
         if !deleted.is_empty() {
             self.modified = true;
             self.undo = Undo::Span { pos, text: deleted };
@@ -991,7 +1136,7 @@ impl Editor {
     fn cmd_erase_bol(&mut self) -> CommandResult {
         let start = self.buffer.line_start(self.buffer.cursor());
         let len = self.buffer.cursor() - start;
-        let mut chars: Vec<char> = (0..len).map(|_| self.buffer.delete_left().unwrap()).collect();
+        let mut chars: Vec<char> = (0..len).map(|_| self.delete_left().unwrap()).collect();
         chars.reverse();
         if !chars.is_empty() {
             self.modified = true;
@@ -1008,7 +1153,7 @@ impl Editor {
             Undo::None => self.cmd_unsupported("nothing to undelete"),
             Undo::Char { pos, c } => {
                 self.buffer.move_to(pos);
-                self.buffer.insert_char(c);
+                self.insert_char(c);
                 self.modified = true;
                 self.target_col = None;
                 CommandResult::Continue(RedrawHint::Full)
@@ -1016,7 +1161,7 @@ impl Editor {
             Undo::Span { pos, text } => {
                 self.buffer.move_to(pos);
                 for c in text.chars() {
-                    self.buffer.insert_char(c);
+                    self.insert_char(c);
                 }
                 self.modified = true;
                 self.target_col = None;
@@ -1316,7 +1461,7 @@ mod tests {
         let mut ed = Editor::new(Config::default());
         let mut screen = FakeScreen::new();
         let mut keys = ScriptedKeys::new(vec![]);
-        let result = ed.dispatch_block(Key::Ctrl(b'B'), &mut keys, &mut screen).unwrap();
+        let result = ed.dispatch_block(Key::Ctrl(b'Z'), &mut keys, &mut screen).unwrap();
         assert_eq!(result, CommandResult::Continue(RedrawHint::Full));
         assert!(ed.message.unwrap().contains("not implemented"));
     }
@@ -1585,6 +1730,126 @@ mod tests {
         ed.buffer.move_to(cursor);
         ed.orient();
         ed
+    }
+
+    #[test]
+    fn mark_copy_moves_the_cursor_past_the_inserted_copy() {
+        let mut ed = editor_with("abc def", 0);
+        ed.cmd_mark_block_start();
+        ed.buffer.move_to(3);
+        ed.cmd_mark_block_end();
+        assert_eq!(ed.block.span(), Some((0, 3)));
+
+        ed.buffer.move_to(7); // end of the document
+        ed.cmd_copy_block();
+        assert_eq!(ed.buffer.chars().collect::<String>(), "abc defabc");
+        assert_eq!(ed.buffer.cursor(), 10);
+        // the original span is untouched (cursor was after it, not before)
+        assert_eq!(ed.block.span(), Some((0, 3)));
+    }
+
+    #[test]
+    fn copy_shifts_the_original_span_when_inserting_before_it() {
+        let mut ed = editor_with("abc def", 4); // block marks "def"
+        ed.cmd_mark_block_start();
+        ed.buffer.move_to(7);
+        ed.cmd_mark_block_end();
+        assert_eq!(ed.block.span(), Some((4, 7)));
+
+        ed.buffer.move_to(0); // copy "def" in front of everything
+        ed.cmd_copy_block();
+        assert_eq!(ed.buffer.chars().collect::<String>(), "defabc def");
+        // the original "def" shifted right by the 3 inserted chars
+        assert_eq!(ed.block.span(), Some((7, 10)));
+    }
+
+    #[test]
+    fn copy_declines_when_the_cursor_is_inside_the_marked_block() {
+        let mut ed = editor_with("abcdef", 0);
+        ed.cmd_mark_block_start();
+        ed.buffer.move_to(6);
+        ed.cmd_mark_block_end();
+        ed.buffer.move_to(3); // inside [0, 6)
+        ed.cmd_copy_block();
+        assert_eq!(ed.buffer.chars().collect::<String>(), "abcdef"); // unchanged
+        assert!(ed.message.unwrap().contains("can't copy a block onto itself"));
+    }
+
+    #[test]
+    fn erase_block_removes_the_span_and_unmarks() {
+        let mut ed = editor_with("abc def", 0);
+        ed.cmd_mark_block_start();
+        ed.buffer.move_to(4);
+        ed.cmd_mark_block_end();
+        ed.cmd_erase_block();
+        assert_eq!(ed.buffer.chars().collect::<String>(), "def");
+        assert!(ed.block.span().is_none());
+    }
+
+    #[test]
+    fn move_block_relocates_the_text_to_the_cursor() {
+        let mut ed = editor_with("abc def", 0);
+        ed.cmd_mark_block_start();
+        ed.buffer.move_to(3);
+        ed.cmd_mark_block_end(); // marks "abc"
+        ed.buffer.move_to(7); // end of the document
+        ed.cmd_move_block();
+        assert_eq!(ed.buffer.chars().collect::<String>(), " defabc");
+        assert!(ed.block.span().is_none());
+    }
+
+    #[test]
+    fn unmark_clears_both_endpoints() {
+        let mut ed = editor_with("abc", 0);
+        ed.cmd_mark_block_start();
+        ed.buffer.move_to(2);
+        ed.cmd_mark_block_end();
+        ed.cmd_unmark_block();
+        assert!(ed.block.span().is_none());
+    }
+
+    #[test]
+    fn block_endpoints_survive_unrelated_inserts_and_deletes() {
+        let mut ed = editor_with("abcXYZdef", 3);
+        ed.cmd_mark_block_start();
+        ed.buffer.move_to(6);
+        ed.cmd_mark_block_end();
+        assert_eq!(ed.block.span(), Some((3, 6)));
+
+        ed.buffer.move_to(0);
+        ed.cmd_insert('#'); // insert before the block: both endpoints shift right
+        assert_eq!(ed.block.span(), Some((4, 7)));
+
+        ed.buffer.move_to(0);
+        ed.cmd_delete_right(); // delete the '#' back out: endpoints shift back
+        assert_eq!(ed.block.span(), Some((3, 6)));
+    }
+
+    #[test]
+    fn write_block_emits_exactly_the_marked_text() {
+        let mut ed = editor_with("abc def ghi", 4);
+        ed.cmd_mark_block_start();
+        ed.buffer.move_to(7);
+        ed.cmd_mark_block_end();
+        let path = std::env::temp_dir().join(format!("zde-rs-test-write-block-{}.txt", std::process::id()));
+        let mut screen = FakeScreen::new();
+        let mut keys = ScriptedKeys::new(keys_for(path.to_str().unwrap()));
+        ed.cmd_write_block(&mut keys, &mut screen).unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "def");
+        assert!(ed.message.unwrap().contains("block written"));
+        std::fs::remove_file(&path).unwrap();
+    }
+
+    #[test]
+    fn read_file_at_cursor_inserts_the_files_contents() {
+        let path = std::env::temp_dir().join(format!("zde-rs-test-read-file-{}.txt", std::process::id()));
+        std::fs::write(&path, "XYZ").unwrap();
+        let mut ed = editor_with("ab", 1);
+        let mut screen = FakeScreen::new();
+        let mut keys = ScriptedKeys::new(keys_for(path.to_str().unwrap()));
+        ed.cmd_read_file_at_cursor(&mut keys, &mut screen).unwrap();
+        assert_eq!(ed.buffer.chars().collect::<String>(), "aXYZb");
+        std::fs::remove_file(&path).unwrap();
     }
 
     #[test]

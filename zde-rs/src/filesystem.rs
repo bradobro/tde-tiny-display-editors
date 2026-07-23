@@ -18,6 +18,7 @@
 use std::io;
 use std::path::Path;
 
+use crate::block::Block;
 use crate::buffer::GapBuffer;
 use crate::editor::Editor;
 
@@ -64,6 +65,7 @@ pub fn load_into(editor: &mut Editor, path: &Path) -> io::Result<()> {
     editor.filename = Some(path.to_string_lossy().into_owned());
     editor.modified = false;
     editor.top_offset = 0;
+    editor.block = Block::default(); // old offsets are meaningless in a fresh buffer
     Ok(())
 }
 
@@ -81,7 +83,32 @@ pub fn save(editor: &mut Editor) -> io::Result<()> {
     Ok(())
 }
 
-// TODO(iter 0801): read_block/write_block for ^KR / ^KW (zde17.asm:4871, 4943).
+/// Write the marked block's text to `path` (`^KW` = `Write`, `zde17.asm:4943`).
+/// Errors (rather than silently no-op'ing) if no block is marked, matching
+/// the ASM's `Error7` ("must be marked") check that gates every block command.
+pub fn write_block(editor: &Editor, path: &Path) -> io::Result<()> {
+    let (lo, hi) = editor
+        .block
+        .span()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "no block marked"))?;
+    let text: String = (lo..hi).map(|i| editor.buffer.char_at(i).expect("block span is within the document")).collect();
+    std::fs::write(path, text)
+}
+
+/// Read `path`'s contents in at the cursor (`^KR` = `Read`, `zde17.asm:4871`).
+/// A missing file is an error here (unlike `load_into`'s "new file" leniency)
+/// since there's no sensible "insert nothing" fallback the user asked for.
+pub fn read_file_at_cursor(editor: &mut Editor, path: &Path) -> io::Result<()> {
+    let bytes = read_file(path)?.ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "file not found"))?;
+    let text = String::from_utf8(bytes).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    for c in text.chars() {
+        editor.insert_char(c);
+    }
+    if !text.is_empty() {
+        editor.modified = true;
+    }
+    Ok(())
+}
 
 #[cfg(test)]
 mod tests {

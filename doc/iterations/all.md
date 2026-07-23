@@ -15,7 +15,7 @@ Legend: ✅ done · ⬜ not done. Trailing parentheticals are color, not status.
 - ✅ [[doc/iterations/0500-EPIC-file-io]] — load/save/BAK/change-name/quit
 - ✅ [[doc/iterations/0600-EPIC-formatting]] — wordwrap, reformat, margins, tabs, center
 - ✅ [[doc/iterations/0700-EPIC-search]] — find/replace/repeat
-- ⬜ [[doc/iterations/0800-EPIC-block-ops]] — block mark/copy/move/erase/read/write (ready)
+- ✅ [[doc/iterations/0800-EPIC-block-ops]] — block mark/copy/move/erase/read/write
 - ⬜ [[doc/iterations/0900-EPIC-help-docs]] — help menus, toggles, MANUAL.md, README.md (ready)
 - ⬜ [[doc/iterations/1000-EPIC-advanced-deferred]] — macros, directory view, windowing (deferred)
 
@@ -50,7 +50,7 @@ Legend: ✅ done · ⬜ not done. Trailing parentheticals are color, not status.
 - ✅ [[doc/iterations/0701-iter-find-replace]] — find/replace forward/back/global/repeat, case-insensitive
 
 ### 0800 — Block Operations
-- ⬜ [[doc/iterations/0801-iter-block-ops]] — mark/copy/move/erase/read/write (ready)
+- ✅ [[doc/iterations/0801-iter-block-ops]] — mark/copy/move/erase/read/write
 
 ### 0900 — Help, Toggles & Docs
 - ⬜ [[doc/iterations/0901-iter-help-ruler-toggles]] — help menus, ruler, mode toggles (ready)
