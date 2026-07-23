@@ -52,3 +52,15 @@ later becomes a hard constraint (see Consequences).
   and `screen::Screen` are implemented (iteration 0103 / epic 0300).
 - If size is the yardstick, record before/after `cargo build --release` binary
   sizes so the project can answer its own headline question.
+
+## Aside: why not ratatui?
+
+Considered and rejected. Ratatui's value is a widget/layout system and diffed
+rendering for dashboard-style TUIs (tables, gauges, tabs); it doesn't reduce
+keyboard handling (you still parse the underlying backend's `KeyEvent`s
+yourself) or app-loop dispatch (ZDE's control-key command tables are ours to
+write regardless), and none of its built-in widgets model a gap-buffer text
+editor with precise cursor placement — a custom widget would be needed
+anyway. It would also pull in a materially larger dependency tree on a
+project whose stated goal is minimal size. Plain crossterm through the
+`screen`/`keyboard` modules stays the better fit.
