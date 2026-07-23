@@ -1,12 +1,12 @@
 # 0602 — Word wrap, reformat & center
 
 Epic: [[doc/iterations/0600-EPIC-formatting]]
-Status: ready
+Status: done
 
 ## Progress
-- ⬜ design
-- ⬜ implement
-- ⬜ test
+- ✅ design
+- ✅ implement
+- ✅ test
 
 ## Goal
 
@@ -32,6 +32,24 @@ margin, reflow a paragraph to the margins, and center/flush a line.
 - Reformat a ragged paragraph → lines fit within the margins, word boundaries
   preserved, hard CRs kept, idempotent on a second reform.
 - Center/flush place text at the correct columns.
+
+## Notes
+
+- Word wrap applies the left margin to the new line (ASM `DoLM`) but does
+  *not* apply auto-indent or double-space — rereading `WdWrap`
+  (`zde17.asm:5419`-`5455`) shows it only calls `ChkLM`/`DoLM`, never `ChkAI`;
+  the "respect auto-indent and double-space" line above was planning-stage
+  text that didn't hold up against the ASM. Those two toggles instead affect
+  `cmd_cr` (`^M`/`^N`), matching where `ChkAI` is actually called
+  (`zde17.asm:4137`,`4175`).
+- Reformat paragraph boundaries: since [[doc/adr/0002-text-encoding-soft-space]]
+  drops the soft/hard space distinction entirely, this port has no bit to
+  tell a paragraph-internal line break from a paragraph-ending one. Simplification:
+  a paragraph is the widest run of non-blank lines around the cursor — a blank
+  line (or buffer start/end) is always a hard boundary. Reflow uses greedy
+  word-packing (`format::reflow_paragraph`) rather than the ASM's char-by-char
+  `RfmNL`/`RfmPL` walk; both produce margin-fitting, word-preserving output,
+  confirmed idempotent by re-running reform on already-reformatted text.
 
 ## Depends on
 - [[doc/iterations/0601-iter-tabs-margins-columns]].

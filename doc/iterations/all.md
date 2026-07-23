@@ -13,7 +13,7 @@ Legend: ✅ done · ⬜ not done. Trailing parentheticals are color, not status.
 - ✅ [[doc/iterations/0300-EPIC-screen-loop]] — screen rendering, status line, main loop + dispatch
 - ✅ [[doc/iterations/0400-EPIC-core-editing]] — insert/delete/undo + cursor movement
 - ✅ [[doc/iterations/0500-EPIC-file-io]] — load/save/BAK/change-name/quit
-- ⬜ [[doc/iterations/0600-EPIC-formatting]] — wordwrap, reformat, margins, tabs, center (ready)
+- ✅ [[doc/iterations/0600-EPIC-formatting]] — wordwrap, reformat, margins, tabs, center
 - ⬜ [[doc/iterations/0700-EPIC-search]] — find/replace/repeat (ready)
 - ⬜ [[doc/iterations/0800-EPIC-block-ops]] — block mark/copy/move/erase/read/write (ready)
 - ⬜ [[doc/iterations/0900-EPIC-help-docs]] — help menus, toggles, MANUAL.md, README.md (ready)
@@ -43,8 +43,8 @@ Legend: ✅ done · ⬜ not done. Trailing parentheticals are color, not status.
 - ✅ [[doc/iterations/0501-iter-load-save-bak]] — argv filename, load, save, BAK, change-name, quit/exit/done
 
 ### 0600 — Formatting
-- ⬜ [[doc/iterations/0601-iter-tabs-margins-columns]] — column tracking, hard/variable tabs, margins (ready)
-- ⬜ [[doc/iterations/0602-iter-wordwrap-reform-center]] — word wrap, paragraph reform, center/flush (ready)
+- ✅ [[doc/iterations/0601-iter-tabs-margins-columns]] — column tracking, hard/variable tabs, margins
+- ✅ [[doc/iterations/0602-iter-wordwrap-reform-center]] — word wrap, paragraph reform, center/flush
 
 ### 0700 — Search & Replace
 - ⬜ [[doc/iterations/0701-iter-find-replace]] — find/replace forward/back/global/repeat, case-insensitive (ready)

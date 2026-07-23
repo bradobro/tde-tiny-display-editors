@@ -32,6 +32,7 @@ use crate::block::Block;
 use crate::buffer::GapBuffer;
 use crate::config::Config;
 use crate::filesystem;
+use crate::format::{self, WrapDecision};
 use crate::help::{self, Menu};
 use crate::keyboard::{Key, KeySource};
 use crate::screen::{self, HeaderInfo, Screen};
@@ -296,7 +297,7 @@ impl Editor {
             Key::Down => self.cmd_down(),
             Key::Ctrl(b'A') => self.cmd_word_left(),
             Key::Ctrl(b'F') => self.cmd_word_right(),
-            Key::Ctrl(b'B') => self.cmd_unsupported("reform paragraph"),
+            Key::Ctrl(b'B') => self.cmd_reform(),
             Key::Ctrl(b'C') => self.cmd_page_forward(),
             Key::Ctrl(b'G') => self.cmd_delete_right(),
             Key::Ctrl(b'I') => self.cmd_tab(),
@@ -329,7 +330,7 @@ impl Editor {
             // ESC is a synonym prefix for the block family (ASM `CKSyn` default).
             Menu::Block | Menu::Escape => self.dispatch_block(key2, keys, screen)?,
             Menu::Quick => self.dispatch_quick(key2),
-            Menu::OnScreen => self.dispatch_onscreen(key2),
+            Menu::OnScreen => self.dispatch_onscreen(key2, keys, screen)?,
             Menu::Main => unreachable!("Main is never itself a prefix"),
         };
         Ok(result)
@@ -393,17 +394,17 @@ impl Editor {
     }
 
     /// `^O` onscreen toggles/margins table (`OMnuSt`, `zde17.asm:577`).
-    fn dispatch_onscreen(&mut self, key: Key) -> CommandResult {
-        match key {
+    fn dispatch_onscreen(&mut self, key: Key, keys: &mut dyn KeySource, screen: &mut dyn Screen) -> io::Result<CommandResult> {
+        Ok(match key {
             Key::Esc | Key::Char(' ') => CommandResult::Continue(RedrawHint::CursorOnly),
             Key::Up => self.cmd_make_top(),
-            Key::Ctrl(b'A') => self.cmd_unsupported("toggle auto-indent"),
-            Key::Ctrl(b'C') => self.cmd_unsupported("center line"),
-            Key::Ctrl(b'F') => self.cmd_unsupported("flush line right"),
+            Key::Ctrl(b'A') => self.cmd_toggle_auto_indent(),
+            Key::Ctrl(b'C') => self.cmd_center_or_flush(false),
+            Key::Ctrl(b'F') => self.cmd_center_or_flush(true),
             Key::Ctrl(b'D') => self.cmd_unsupported("toggle show hard CR"),
-            Key::Ctrl(b'L') => self.cmd_unsupported("set left margin"),
-            Key::Ctrl(b'R') => self.cmd_unsupported("set right margin"),
-            Key::Ctrl(b'S') => self.cmd_unsupported("toggle double-space"),
+            Key::Ctrl(b'L') => return self.cmd_set_margin(keys, screen, "Left margin: ", true),
+            Key::Ctrl(b'R') => return self.cmd_set_margin(keys, screen, "Right margin: ", false),
+            Key::Ctrl(b'S') => self.cmd_toggle_double_space(),
             Key::Ctrl(b'T') => self.cmd_toggle_ruler(),
             Key::Ctrl(b'V') => self.cmd_unsupported("toggle variable tabs"),
             Key::Ctrl(b'I') => self.cmd_unsupported("set variable tab stop"),
@@ -413,7 +414,7 @@ impl Editor {
             Key::Ctrl(b'P') => self.cmd_dropped("printer page format"),
             Key::Ctrl(b'W') => self.cmd_deferred("split window"),
             _ => self.cmd_unsupported("onscreen command"),
-        }
+        })
     }
 
     fn cmd_insert(&mut self, c: char) -> CommandResult {
@@ -423,17 +424,176 @@ impl Editor {
         self.buffer.insert_char(c);
         self.modified = true;
         self.target_col = None;
+        // ASM only checks wordwrap after an ordinary printing char, not a
+        // space (the wrap search below looks *backward* for a space, so
+        // checking right after typing one would just find itself) or a tab
+        // (`zde17.asm:4094`-`4099`).
+        if c != ' ' && c != '\t' {
+            self.wrap_if_past_margin();
+        }
         CommandResult::Continue(RedrawHint::Full)
     }
 
-    /// `^M`/`^N` — carriage return, with `auto_indent` selecting `ICRA`
-    /// (`zde17.asm:4203`) once the format epoch fills in indentation; for now
-    /// both just insert a line break.
-    fn cmd_cr(&mut self, _auto_indent: bool) -> CommandResult {
+    /// `^M`/`^N` — carriage return. `_open_line` distinguishes plain Enter
+    /// from `^N` (ASM `ICR` vs `ICRA`, `zde17.asm:4119`,`4159`); both apply
+    /// the same auto-indent/double-space handling (`ChkAI`, `zde17.asm:4205`),
+    /// so for now both behave identically.
+    fn cmd_cr(&mut self, _open_line: bool) -> CommandResult {
+        let indent = if self.auto_indent { self.leading_whitespace(self.buffer.cursor()) } else { String::new() };
         self.buffer.insert_char('\n');
+        if self.double_space {
+            self.buffer.insert_char('\n');
+        }
+        for c in indent.chars() {
+            self.buffer.insert_char(c);
+        }
         self.modified = true;
         self.target_col = None;
         CommandResult::Continue(RedrawHint::Full)
+    }
+
+    /// The leading run of spaces/tabs on the line containing `offset` (ASM
+    /// `CntSpc`, `zde17.asm:5338`), copied onto a new line when `auto_indent`
+    /// is on.
+    fn leading_whitespace(&self, offset: usize) -> String {
+        let start = self.buffer.line_start(offset);
+        let end = self.buffer.line_end(start);
+        (start..end)
+            .map(|i| self.buffer.char_at(i).expect("offset within a line is always in bounds"))
+            .take_while(|c| *c == ' ' || *c == '\t')
+            .collect()
+    }
+
+    /// Wrap the current word to a new line if it just pushed past the right
+    /// margin (ASM `WdWrap`, `zde17.asm:5419`). The word is already in the
+    /// buffer (the user just typed its last char); wrapping only needs to
+    /// swap the space before it for a line break, then apply the left margin.
+    fn wrap_if_past_margin(&mut self) {
+        let col = self.buffer.column_of(self.buffer.cursor(), self.tab_width()) + 1;
+        if format::check_right_margin(col, self.cfg.right_margin) != WrapDecision::WrapWord {
+            return;
+        }
+        let cursor = self.buffer.cursor();
+        let line_start = self.buffer.line_start(cursor);
+        let prefix: String = (line_start..cursor).map(|i| self.buffer.char_at(i).unwrap()).collect();
+        let Some(break_at) = format::find_wrap_point(&prefix) else { return };
+        self.buffer.move_to(line_start + break_at);
+        self.buffer.delete_right(); // the space the word was wrapping at
+        self.buffer.insert_char('\n');
+        let inserted = self.apply_left_margin();
+        self.buffer.move_to(cursor + inserted);
+        self.modified = true;
+    }
+
+    /// Insert spaces to bring the cursor's line up to `Config::left_margin`
+    /// (ASM `DoLM`, `zde17.asm:5330`), returning how many were inserted so
+    /// callers can adjust a saved cursor offset.
+    fn apply_left_margin(&mut self) -> usize {
+        let n = (self.cfg.left_margin as usize).saturating_sub(1);
+        for _ in 0..n {
+            self.buffer.insert_char(' ');
+        }
+        n
+    }
+
+    /// `^B` — reflow the cursor's paragraph to the current margins (ASM
+    /// `Reform`, `zde17.asm:5477`). A no-op when the right margin is off, same
+    /// as the ASM.
+    fn cmd_reform(&mut self) -> CommandResult {
+        if self.cfg.right_margin <= 1 {
+            return self.cmd_unsupported("reform paragraph (no right margin set)");
+        }
+        let (start, end) = self.paragraph_bounds(self.buffer.cursor());
+        let original: String = (start..end).map(|i| self.buffer.char_at(i).unwrap()).collect();
+        let reflowed = format::reflow_paragraph(&original, self.cfg.left_margin as usize, self.cfg.right_margin as usize);
+        self.buffer.move_to(start);
+        for _ in start..end {
+            self.buffer.delete_right();
+        }
+        for c in reflowed.chars() {
+            self.buffer.insert_char(c);
+        }
+        self.modified = true;
+        CommandResult::Continue(RedrawHint::Full)
+    }
+
+    /// The span `[start, end)` of the paragraph containing `offset`: the
+    /// widest run of non-blank lines around it, stopping at a blank line or
+    /// the ends of the document. `end` lands on the last line's own
+    /// terminating `'\n'` (or end-of-document), so that hard CR is never
+    /// touched by the reflow that replaces `[start, end)` (ASM former-margin
+    /// handling, `zde17.asm:5338`).
+    fn paragraph_bounds(&self, offset: usize) -> (usize, usize) {
+        let mut start = self.buffer.line_start(offset);
+        while start > 0 {
+            let prev_start = self.line_start_n_back(start, 1);
+            if self.buffer.line_end(prev_start) == prev_start {
+                break; // the line above is blank: stop here
+            }
+            start = prev_start;
+        }
+        let mut end = self.buffer.line_end(offset);
+        loop {
+            let next_start = end + 1;
+            if next_start > self.buffer.len() || self.buffer.line_end(next_start) == next_start {
+                break;
+            }
+            end = self.buffer.line_end(next_start);
+        }
+        (start, end)
+    }
+
+    /// `^OC`/`^OF` — center or flush-right the cursor's line between the
+    /// margins (ASM `Center`, `zde17.asm:5691`). A no-op when the right
+    /// margin is off, same as the ASM.
+    fn cmd_center_or_flush(&mut self, flush_right: bool) -> CommandResult {
+        if self.cfg.right_margin <= 1 {
+            return self.cmd_unsupported("center/flush line (no right margin set)");
+        }
+        let start = self.buffer.line_start(self.buffer.cursor());
+        let end = self.buffer.line_end(self.buffer.cursor());
+        let text: String = (start..end).map(|i| self.buffer.char_at(i).unwrap()).collect();
+        let centered = format::center_line(&text, self.cfg.left_margin as usize, self.cfg.right_margin as usize, flush_right);
+        self.buffer.move_to(start);
+        for _ in start..end {
+            self.buffer.delete_right();
+        }
+        for c in centered.chars() {
+            self.buffer.insert_char(c);
+        }
+        self.modified = true;
+        CommandResult::Continue(RedrawHint::Full)
+    }
+
+    /// `^OA` — toggle auto-indent (ASM `AIFlg`, `zde17.asm:4205`).
+    fn cmd_toggle_auto_indent(&mut self) -> CommandResult {
+        self.auto_indent = !self.auto_indent;
+        CommandResult::Continue(RedrawHint::Full)
+    }
+
+    /// `^OS` — toggle double-space (ASM `DSFlg`).
+    fn cmd_toggle_double_space(&mut self) -> CommandResult {
+        self.double_space = !self.double_space;
+        CommandResult::Continue(RedrawHint::Full)
+    }
+
+    /// `^OL`/`^OR` — prompt for a column and set the left or right margin
+    /// (ASM `SetLM`/`SetRM`, `zde17.asm:5216`,`5214`). Leaves the margin
+    /// unchanged on a cancelled or non-numeric entry.
+    fn cmd_set_margin(&mut self, keys: &mut dyn KeySource, screen: &mut dyn Screen, prompt: &str, is_left: bool) -> io::Result<CommandResult> {
+        let Some(input) = self.read_line(screen, keys, prompt)? else {
+            return Ok(CommandResult::Continue(RedrawHint::Full));
+        };
+        let Ok(col) = input.trim().parse::<u8>() else {
+            self.message = Some(format!("not a column number: {input}"));
+            return Ok(CommandResult::Continue(RedrawHint::Full));
+        };
+        if is_left {
+            self.cfg.left_margin = col;
+        } else {
+            self.cfg.right_margin = col;
+        }
+        Ok(CommandResult::Continue(RedrawHint::Full))
     }
 
     fn cmd_left(&mut self) -> CommandResult {
@@ -448,8 +608,24 @@ impl Editor {
         CommandResult::Continue(RedrawHint::CursorOnly)
     }
 
+    /// `^I` — hard tab, or (when `variable_tabs_on`) space over to the next
+    /// configured variable tab stop instead of inserting a literal tab byte
+    /// (ASM `TabKey`/`VarTab`, `zde17.asm:4101`,`3871`). A stop past every
+    /// configured column is a no-op, matching the ASM's "none, no action".
     fn cmd_tab(&mut self) -> CommandResult {
-        self.cmd_insert('\t')
+        if !self.variable_tabs_on {
+            return self.cmd_insert('\t');
+        }
+        let col = self.buffer.column_of(self.buffer.cursor(), self.tab_width());
+        let Some(target) = format::next_variable_tab_stop(col, &self.cfg.variable_tabs) else {
+            return CommandResult::Continue(RedrawHint::CursorOnly);
+        };
+        for _ in col..target {
+            self.buffer.insert_char(' ');
+        }
+        self.modified = true;
+        self.target_col = None;
+        CommandResult::Continue(RedrawHint::Full)
     }
 
     fn cmd_toggle_insert(&mut self) -> CommandResult {
@@ -1045,6 +1221,164 @@ mod tests {
         let mut ed = Editor::new(Config::default());
         ed.cmd_show_help(Menu::Main);
         assert!(ed.message.unwrap().contains("Main commands"));
+    }
+
+    #[test]
+    fn typing_past_the_right_margin_wraps_the_current_word() {
+        let cfg = Config { right_margin: 10, left_margin: 1, ..Config::default() };
+        let mut ed = Editor::new(cfg);
+        ed.buffer = GapBuffer::from_str("one two ");
+        ed.buffer.move_to(8);
+        ed.orient();
+        for c in "three".chars() {
+            ed.cmd_insert(c);
+        }
+        assert_eq!(ed.buffer.chars().collect::<String>(), "one two\nthree");
+        assert_eq!(ed.buffer.cursor(), 13); // right after "three"
+    }
+
+    #[test]
+    fn wrapped_line_is_indented_to_the_left_margin() {
+        let cfg = Config { right_margin: 10, left_margin: 3, ..Config::default() };
+        let mut ed = Editor::new(cfg);
+        ed.buffer = GapBuffer::from_str("one two ");
+        ed.buffer.move_to(8);
+        ed.orient();
+        for c in "three".chars() {
+            ed.cmd_insert(c);
+        }
+        assert_eq!(ed.buffer.chars().collect::<String>(), "one two\n  three");
+    }
+
+    #[test]
+    fn a_single_overlong_word_is_not_wrapped() {
+        let cfg = Config { right_margin: 5, ..Config::default() };
+        let mut ed = Editor::new(cfg);
+        for c in "supercalifragilistic".chars() {
+            ed.cmd_insert(c);
+        }
+        assert_eq!(ed.buffer.chars().collect::<String>(), "supercalifragilistic");
+    }
+
+    #[test]
+    fn tab_key_inserts_a_literal_tab_when_variable_tabs_are_off() {
+        let mut ed = Editor::new(Config::default());
+        ed.cmd_tab();
+        assert_eq!(ed.buffer.chars().collect::<String>(), "\t");
+    }
+
+    #[test]
+    fn tab_key_inserts_spaces_to_the_next_variable_stop_when_enabled() {
+        let mut ed = Editor::new(Config::default());
+        ed.variable_tabs_on = true;
+        ed.buffer = GapBuffer::from_str("ab");
+        ed.orient();
+        ed.cmd_tab();
+        assert_eq!(ed.buffer.chars().collect::<String>(), "      ab"); // stop at col 6 (config default)
+    }
+
+    #[test]
+    fn tab_key_is_a_no_op_past_every_variable_stop() {
+        let mut ed = Editor::new(Config::default());
+        ed.variable_tabs_on = true;
+        ed.buffer = GapBuffer::from_str(&" ".repeat(30));
+        ed.buffer.move_to(30);
+        ed.orient();
+        ed.cmd_tab();
+        assert_eq!(ed.buffer.chars().collect::<String>(), " ".repeat(30));
+    }
+
+    #[test]
+    fn reform_reflows_the_cursors_paragraph_to_the_margins() {
+        let cfg = Config { right_margin: 15, left_margin: 1, ..Config::default() };
+        let mut ed = Editor::new(cfg);
+        ed.buffer = GapBuffer::from_str("the quick brown fox\njumps over\n\nnext paragraph");
+        ed.buffer.move_to(0);
+        ed.orient();
+        ed.cmd_reform();
+        assert_eq!(
+            ed.buffer.chars().collect::<String>(),
+            "the quick brown\nfox jumps over\n\nnext paragraph"
+        );
+    }
+
+    #[test]
+    fn reform_is_a_no_op_when_the_right_margin_is_off() {
+        let cfg = Config { right_margin: 1, ..Config::default() };
+        let mut ed = Editor::new(cfg);
+        ed.buffer = GapBuffer::from_str("the quick brown fox");
+        ed.orient();
+        ed.cmd_reform();
+        assert_eq!(ed.buffer.chars().collect::<String>(), "the quick brown fox");
+        assert!(ed.message.unwrap().contains("not implemented"));
+    }
+
+    #[test]
+    fn center_and_flush_place_the_line_at_the_right_columns() {
+        let cfg = Config { right_margin: 11, left_margin: 1, ..Config::default() };
+        let mut ed = Editor::new(cfg.clone());
+        ed.buffer = GapBuffer::from_str("hi");
+        ed.orient();
+        ed.cmd_center_or_flush(false);
+        assert_eq!(ed.buffer.chars().collect::<String>(), "    hi");
+
+        let mut ed = Editor::new(cfg);
+        ed.buffer = GapBuffer::from_str("hi");
+        ed.orient();
+        ed.cmd_center_or_flush(true);
+        assert_eq!(ed.buffer.chars().collect::<String>(), "         hi");
+    }
+
+    #[test]
+    fn auto_indent_copies_leading_whitespace_onto_the_new_line() {
+        let mut ed = Editor::new(Config::default());
+        ed.auto_indent = true;
+        ed.buffer = GapBuffer::from_str("  indented");
+        ed.buffer.move_to(ed.buffer.len());
+        ed.orient();
+        ed.cmd_cr(false);
+        assert_eq!(ed.buffer.chars().collect::<String>(), "  indented\n  ");
+    }
+
+    #[test]
+    fn double_space_inserts_a_blank_line_on_enter() {
+        let mut ed = Editor::new(Config::default());
+        ed.double_space = true;
+        ed.buffer = GapBuffer::from_str("hi");
+        ed.buffer.move_to(2);
+        ed.orient();
+        ed.cmd_cr(false);
+        assert_eq!(ed.buffer.chars().collect::<String>(), "hi\n\n");
+    }
+
+    #[test]
+    fn toggle_auto_indent_and_double_space_flip_their_flags() {
+        let mut ed = Editor::new(Config::default());
+        ed.cmd_toggle_auto_indent();
+        assert!(ed.auto_indent);
+        ed.cmd_toggle_double_space();
+        assert!(ed.double_space);
+    }
+
+    #[test]
+    fn set_margin_reads_a_column_number_and_applies_it() {
+        let mut ed = Editor::new(Config::default());
+        let mut screen = FakeScreen::new();
+        let mut keys = ScriptedKeys::new(vec![Key::Char('4'), Key::Char('0'), Key::Char('\r')]);
+        let result = ed.cmd_set_margin(&mut keys, &mut screen, "Right margin: ", false).unwrap();
+        assert_eq!(result, CommandResult::Continue(RedrawHint::Full));
+        assert_eq!(ed.cfg.right_margin, 40);
+    }
+
+    #[test]
+    fn set_margin_rejects_non_numeric_input() {
+        let mut ed = Editor::new(Config::default());
+        let original = ed.cfg.right_margin;
+        let mut screen = FakeScreen::new();
+        let mut keys = ScriptedKeys::new(vec![Key::Char('x'), Key::Char('\r')]);
+        ed.cmd_set_margin(&mut keys, &mut screen, "Right margin: ", false).unwrap();
+        assert_eq!(ed.cfg.right_margin, original);
+        assert!(ed.message.unwrap().contains("not a column number"));
     }
 
     /// Build an editor over `text` with the cursor at `cursor`, orienting so

@@ -1,6 +1,6 @@
 # Epic 0600 — Formatting
 
-Status: ready
+Status: done
 
 ## Goal
 
