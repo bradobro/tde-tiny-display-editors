@@ -1,7 +1,7 @@
 # 0501 — Load, save, BAK & quit flows
 
 Epic: [[doc/iterations/0500-EPIC-file-io]]
-Status: planning
+Status: ready
 
 ## Progress
 - ⬜ design

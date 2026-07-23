@@ -1,12 +1,12 @@
 # 0103 — Terminal backend & safe raw mode
 
 Epic: [[doc/iterations/0100-EPIC-scaffolding]]
-Status: planning
+Status: done
 
 ## Progress
-- ⬜ design
-- ⬜ implement
-- ⬜ test
+- ✅ design
+- ✅ implement
+- ✅ test
 
 ## Goal
 
@@ -42,3 +42,27 @@ every exit path.
 
 ## References
 - `zde17.asm:924` (`AdjKey`), `7039` (`GoTo`), `739` (clear on quit).
+
+## Notes (implementation)
+
+- `screen::CrosstermScreen` and `keyboard::CrosstermKeys` implement the
+  `Screen`/`KeySource` traits over `crossterm` 0.29. `enter`/`leave` are
+  idempotent (an `entered` flag guards re-entry); `Drop` calls `leave` as a
+  backstop.
+- `crossterm::event` already parses arrow/Delete escape sequences for us (the
+  `AdjKey` job), so `keyboard::key_from_event` only maps `KeyCode` → our `Key`;
+  it's a pure function unit-tested with constructed `KeyEvent` values (no live
+  terminal needed), matching the test plan above.
+- Guaranteed restore on panic: `main::install_panic_hook` disables raw mode and
+  leaves the alternate screen *before* the default hook prints, so a panic
+  message isn't garbled by leftover terminal state; `CrosstermScreen::Drop` is
+  a second backstop during unwinding.
+- `main.rs` currently runs a temporary demo loop (echoes each normalized key,
+  quits on `^U` per ADR 0003) purely to exercise this backend end-to-end;
+  iteration 0303 replaces it with the real `Ready:` loop and command dispatch.
+- Manually smoke-tested via a pty harness (`pty.fork` + synthetic key bytes):
+  confirmed alt-screen/cursor enter-leave sequences bracket the session
+  cleanly on `^U` quit, that a plain char and an arrow key both echo with
+  correct normalization, and that a forced `panic!` restores the terminal
+  (cursor shown, alternate screen left) before the panic message prints and
+  the process exits with Rust's normal panic code (101).

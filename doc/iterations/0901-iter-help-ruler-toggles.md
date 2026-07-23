@@ -1,7 +1,7 @@
 # 0901 — Help menus, ruler & toggles
 
 Epic: [[doc/iterations/0900-EPIC-help-docs]]
-Status: planning
+Status: ready
 
 ## Progress
 - ⬜ design

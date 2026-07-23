@@ -1,12 +1,12 @@
 # 0202 — Line/column queries
 
 Epic: [[doc/iterations/0200-EPIC-text-engine]]
-Status: planning
+Status: done
 
 ## Progress
-- ⬜ design
-- ⬜ implement
-- ⬜ test
+- ✅ design
+- ✅ implement
+- ✅ test
 
 ## Goal
 

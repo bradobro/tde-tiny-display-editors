@@ -1,7 +1,7 @@
 # 0801 — Block operations
 
 Epic: [[doc/iterations/0800-EPIC-block-ops]]
-Status: planning
+Status: ready
 
 ## Progress
 - ⬜ design

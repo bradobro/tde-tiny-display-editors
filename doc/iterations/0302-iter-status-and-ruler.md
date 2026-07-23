@@ -1,12 +1,12 @@
 # 0302 — Status header & ruler line
 
 Epic: [[doc/iterations/0300-EPIC-screen-loop]]
-Status: planning
+Status: done
 
 ## Progress
-- ⬜ design
-- ⬜ implement
-- ⬜ test
+- ✅ design
+- ✅ implement
+- ✅ test
 
 ## Goal
 

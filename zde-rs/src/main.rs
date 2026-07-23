@@ -39,10 +39,51 @@ mod keyboard;
 mod screen;
 mod search;
 
+use std::io;
+
+use editor::Editor;
+use keyboard::CrosstermKeys;
+use screen::{CrosstermScreen, Screen};
+
+/// Restore the terminal (leave alternate screen, disable raw mode) before the
+/// default panic handler prints, so a panic message during a crash isn't
+/// garbled by leftover raw-mode/alternate-screen state. This is belt-and-braces
+/// with `CrosstermScreen`'s `Drop` impl (which runs during unwinding) — see
+/// `[[doc/adr/0003-reserved-control-keys]]` on guaranteed restore.
+fn install_panic_hook() {
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let _ = crossterm::terminal::disable_raw_mode();
+        let _ = crossterm::execute!(
+            io::stdout(),
+            crossterm::cursor::Show,
+            crossterm::terminal::LeaveAlternateScreen
+        );
+        default_hook(info);
+    }));
+}
+
 fn main() {
-    // TODO(epic 0100 / 0300): parse argv for an optional filename, construct the
-    // Editor, run the main loop, restore the terminal on exit. For now this is a
-    // buildable stub so the module tree compiles.
-    let _cfg = config::Config::default();
-    println!("zde-rs: not yet implemented — see doc/iterations/ for the plan.");
+    let cfg = config::Config::default();
+    install_panic_hook();
+
+    let mut editor = Editor::new(cfg);
+    // TODO(iter 0501): argv filename -> load into `editor` (new file if absent).
+
+    let mut screen = CrosstermScreen::new();
+    if let Err(e) = screen.enter() {
+        eprintln!("zde-rs: failed to enter raw mode: {e}");
+        return;
+    }
+
+    let mut keys = CrosstermKeys::new();
+    let result = editor.run(&mut screen, &mut keys);
+
+    // Explicit in addition to CrosstermScreen's Drop, so the terminal is back
+    // to normal before anything else in main runs (e.g. printing the error).
+    let _ = screen.leave();
+
+    if let Err(e) = result {
+        eprintln!("zde-rs: error reading input: {e}");
+    }
 }

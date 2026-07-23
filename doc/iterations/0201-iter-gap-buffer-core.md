@@ -1,12 +1,12 @@
 # 0201 — Gap buffer core
 
 Epic: [[doc/iterations/0200-EPIC-text-engine]]
-Status: planning
+Status: done
 
 ## Progress
-- ⬜ design
-- ⬜ implement
-- ⬜ test
+- ✅ design
+- ✅ implement
+- ✅ test
 
 ## Goal
 

@@ -1,7 +1,7 @@
 # 0701 — Find & replace
 
 Epic: [[doc/iterations/0700-EPIC-search]]
-Status: planning
+Status: ready
 
 ## Progress
 - ⬜ design

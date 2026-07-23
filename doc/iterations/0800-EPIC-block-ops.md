@@ -1,6 +1,6 @@
 # Epic 0800 — Block Operations
 
-Status: planning
+Status: ready
 
 ## Goal
 

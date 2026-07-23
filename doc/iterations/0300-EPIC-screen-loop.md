@@ -1,6 +1,6 @@
 # Epic 0300 — Screen & Main Loop
 
-Status: planning
+Status: done
 
 ## Goal
 

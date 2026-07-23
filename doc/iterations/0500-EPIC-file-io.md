@@ -1,6 +1,6 @@
 # Epic 0500 — File I/O
 
-Status: planning
+Status: ready
 
 ## Goal
 

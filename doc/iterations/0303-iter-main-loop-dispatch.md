@@ -1,12 +1,12 @@
 # 0303 — Main loop & command dispatch
 
 Epic: [[doc/iterations/0300-EPIC-screen-loop]]
-Status: planning
+Status: done
 
 ## Progress
-- ⬜ design
-- ⬜ implement
-- ⬜ test
+- ✅ design
+- ✅ implement
+- ✅ test
 
 ## Goal
 

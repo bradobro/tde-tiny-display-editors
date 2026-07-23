@@ -1,7 +1,7 @@
 # 0101 — Spike: map the ZDE ASM architecture
 
 Epic: [[doc/iterations/0100-EPIC-scaffolding]]
-Status: planning
+Status: done
 
 ## Progress
 - ✅ design (architecture mapped during planning pass)

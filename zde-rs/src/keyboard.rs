@@ -41,9 +41,68 @@ pub trait KeySource {
     fn next_key(&mut self) -> std::io::Result<Key>;
 }
 
-// TODO(iter 0301): implement a KeySource over the chosen backend's raw input,
-//                  including the arrow/DEL escape-sequence translation (AdjKey).
-// TODO(iter 0301): macro key injection — the ASM checks a macro queue *before*
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+
+/// Translate a `crossterm` key event into our normalized [`Key`].
+///
+/// `crossterm` already does the ASM's `AdjKey` job for us — it parses the raw
+/// escape sequences for arrows/Delete off the wire and hands us a `KeyCode`,
+/// so this function only has to map *its* vocabulary onto ours. Kept as a
+/// free function (not tied to a live terminal) so it's unit-testable with
+/// plain `KeyEvent` values, per the 0103 test plan.
+fn key_from_event(ev: KeyEvent) -> Option<Key> {
+    // Ignore key-release/repeat reports (only present when a terminal opts
+    // into the Kitty keyboard protocol); we want one Key per keypress.
+    if ev.kind != KeyEventKind::Press {
+        return None;
+    }
+    match ev.code {
+        KeyCode::Up => Some(Key::Up),
+        KeyCode::Down => Some(Key::Down),
+        KeyCode::Left => Some(Key::Left),
+        KeyCode::Right => Some(Key::Right),
+        KeyCode::Delete => Some(Key::Del),
+        KeyCode::Backspace => Some(Key::Backspace),
+        KeyCode::Esc => Some(Key::Esc),
+        KeyCode::Tab => Some(Key::Char('\t')),
+        KeyCode::Enter => Some(Key::Char('\r')),
+        KeyCode::Char(c) if ev.modifiers.contains(KeyModifiers::CONTROL) => {
+            Some(Key::Ctrl(c.to_ascii_uppercase() as u8))
+        }
+        KeyCode::Char(c) => Some(Key::Char(c)),
+        _ => None,
+    }
+}
+
+/// [`KeySource`] over `crossterm`'s blocking event reader, per the decision in
+/// `[[doc/adr/0001-terminal-backend]]`.
+pub struct CrosstermKeys;
+
+impl CrosstermKeys {
+    pub fn new() -> Self {
+        CrosstermKeys
+    }
+}
+
+impl Default for CrosstermKeys {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl KeySource for CrosstermKeys {
+    fn next_key(&mut self) -> std::io::Result<Key> {
+        loop {
+            if let Event::Key(ev) = event::read()?
+                && let Some(key) = key_from_event(ev)
+            {
+                return Ok(key);
+            }
+        }
+    }
+}
+
+// TODO(iter 1001): macro key injection — the ASM checks a macro queue *before*
 //                  the real keyboard (`TRptKy`/`GetKey`, zde17.asm:2583). Advanced
 //                  macros are deferred; leave the seam here.
 
@@ -55,5 +114,53 @@ mod tests {
     fn key_equality() {
         assert_eq!(Key::Ctrl(b'K'), Key::Ctrl(b'K'));
         assert_ne!(Key::Up, Key::Down);
+    }
+
+    #[test]
+    fn translates_arrows_and_del() {
+        assert_eq!(key_from_event(KeyEvent::from(KeyCode::Up)), Some(Key::Up));
+        assert_eq!(
+            key_from_event(KeyEvent::from(KeyCode::Down)),
+            Some(Key::Down)
+        );
+        assert_eq!(
+            key_from_event(KeyEvent::from(KeyCode::Left)),
+            Some(Key::Left)
+        );
+        assert_eq!(
+            key_from_event(KeyEvent::from(KeyCode::Right)),
+            Some(Key::Right)
+        );
+        assert_eq!(
+            key_from_event(KeyEvent::from(KeyCode::Delete)),
+            Some(Key::Del)
+        );
+        assert_eq!(
+            key_from_event(KeyEvent::from(KeyCode::Backspace)),
+            Some(Key::Backspace)
+        );
+        assert_eq!(
+            key_from_event(KeyEvent::from(KeyCode::Esc)),
+            Some(Key::Esc)
+        );
+    }
+
+    #[test]
+    fn translates_control_and_plain_chars() {
+        let ctrl_k = KeyEvent::new(KeyCode::Char('k'), KeyModifiers::CONTROL);
+        assert_eq!(key_from_event(ctrl_k), Some(Key::Ctrl(b'K')));
+
+        let plain_a = KeyEvent::from(KeyCode::Char('a'));
+        assert_eq!(key_from_event(plain_a), Some(Key::Char('a')));
+    }
+
+    #[test]
+    fn ignores_non_press_events() {
+        let release = KeyEvent::new_with_kind(
+            KeyCode::Char('a'),
+            KeyModifiers::NONE,
+            KeyEventKind::Release,
+        );
+        assert_eq!(key_from_event(release), None);
     }
 }

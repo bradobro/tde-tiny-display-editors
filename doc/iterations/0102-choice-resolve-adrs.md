@@ -1,7 +1,7 @@
 # 0102 — Choice: resolve the architecture ADRs
 
 Epic: [[doc/iterations/0100-EPIC-scaffolding]]
-Status: planning
+Status: done
 
 ## Progress
 - ✅ decisions gathered from Brad

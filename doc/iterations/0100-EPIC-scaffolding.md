@@ -1,6 +1,6 @@
 # Epic 0100 — Scaffolding & Decisions
 
-Status: planning
+Status: done
 
 ## Goal
 
@@ -28,9 +28,12 @@ edits text yet; this is the foundation every other epic builds on.
 
 ## Exit criteria
 
-- ADRs 0001-0005 are Accepted (or explicitly deferred).
-- Running `zde-rs` enters full-screen raw mode, echoes normalized keystrokes, and
-  restores the terminal cleanly on quit and on a forced panic.
+- ✅ ADRs 0001-0005 are Accepted (or explicitly deferred).
+- ✅ Running `zde-rs` enters full-screen raw mode, echoes normalized keystrokes, and
+  restores the terminal cleanly on quit and on a forced panic. Implemented over
+  `crossterm` (see `[[doc/iterations/0103-iter-terminal-backend]]`); `main.rs`
+  currently runs a temporary echo/quit demo loop that iteration 0303 replaces
+  with the real `Ready:` loop.
 
 ## References
 

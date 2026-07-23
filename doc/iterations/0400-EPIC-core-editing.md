@@ -1,6 +1,6 @@
 # Epic 0400 — Core Editing
 
-Status: planning
+Status: ready
 
 ## Goal
 

@@ -1,6 +1,6 @@
 # Epic 0200 — Text Engine (gap buffer)
 
-Status: planning
+Status: done
 
 ## Goal
 

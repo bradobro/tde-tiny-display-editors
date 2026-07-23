@@ -1,7 +1,7 @@
 # 0401 — Insert, delete & undelete
 
 Epic: [[doc/iterations/0400-EPIC-core-editing]]
-Status: planning
+Status: ready
 
 ## Progress
 - ⬜ design

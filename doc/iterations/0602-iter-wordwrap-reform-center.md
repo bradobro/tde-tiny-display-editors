@@ -1,7 +1,7 @@
 # 0602 — Word wrap, reformat & center
 
 Epic: [[doc/iterations/0600-EPIC-formatting]]
-Status: planning
+Status: ready
 
 ## Progress
 - ⬜ design
