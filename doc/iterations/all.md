@@ -31,7 +31,7 @@ Legend: ✅ done · ⬜ not done. Trailing parentheticals are color, not status.
 - ⬜ [[doc/iterations/0202-iter-line-column-queries]] — CR scan, line/col queries
 
 ### 0300 — Screen & Main Loop
-- ⬜ [[doc/iterations/0301-iter-render-text-area]] — draw visible text (tabs, soft space, hard CR)
+- ⬜ [[doc/iterations/0301-iter-render-text-area]] — draw visible text (tabs, hard CR)
 - ⬜ [[doc/iterations/0302-iter-status-and-ruler]] — header/status line + ruler
 - ⬜ [[doc/iterations/0303-iter-main-loop-dispatch]] — Ready: loop + Case dispatch + prefix menus
 

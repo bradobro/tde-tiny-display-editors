@@ -11,8 +11,8 @@ renders. Real editing behavior arrives in epic 0400.
 
 ## Scope
 
-- Render the visible slice of the buffer: tab expansion, soft-space display,
-  optional hard-CR glyphs.
+- Render the visible slice of the buffer: tab expansion, optional hard-CR
+  glyphs.
 - Status/header line (file, Pg/Ln/Cl, INS/mode flags) per the ASM layout comment.
 - Ruler line.
 - The `Ready:` main loop and the `Case`-style dispatch, including the prefix

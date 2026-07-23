@@ -18,10 +18,12 @@
 use std::io;
 use std::path::Path;
 
-/// Read a whole file into a byte vector, ready to load into the gap buffer.
+/// Read a whole file's raw bytes from disk.
 ///
 /// Returns `Ok(None)` if the file does not exist (the "new file" case), matching
-/// the original's tolerance for editing a not-yet-existing name.
+/// the original's tolerance for editing a not-yet-existing name. Decoding these
+/// bytes as UTF-8 into the `char`-based gap buffer ([[doc/adr/0002-text-encoding-soft-space]],
+/// [[doc/adr/0005-buffer-data-structure]]) is `load_into`'s job, not this function's.
 pub fn read_file(path: &Path) -> io::Result<Option<Vec<u8>>> {
     match std::fs::read(path) {
         Ok(bytes) => Ok(Some(bytes)),
@@ -31,9 +33,11 @@ pub fn read_file(path: &Path) -> io::Result<Option<Vec<u8>>> {
 }
 
 // TODO(iter 0501): write_file with optional .BAK backup (rename-then-write).
-// TODO(iter 0501): load_into(editor) — read_file then fill the gap buffer; map
-//                  the soft-space/high-bit representation per the encoding ADR.
-// TODO(iter 0501): save(editor) — stream buffer to disk, clear `modified`.
+// TODO(iter 0501): load_into(editor) — read_file then decode as UTF-8
+//                  (str::chars()) and fill the gap buffer; a decode error is a
+//                  real load error (not every byte stream is valid UTF-8).
+// TODO(iter 0501): save(editor) — encode buffer chars back to a String, stream
+//                  to disk, clear `modified`.
 // TODO(iter 0801): read_block/write_block for ^KR / ^KW (zde17.asm:4871, 4943).
 
 #[cfg(test)]

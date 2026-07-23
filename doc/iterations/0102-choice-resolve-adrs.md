@@ -4,28 +4,30 @@ Epic: [[doc/iterations/0100-EPIC-scaffolding]]
 Status: planning
 
 ## Progress
-- ⬜ decisions gathered from Brad
-- ⬜ ADR statuses updated to Accepted/Deferred
-- ⬜ downstream iterations adjusted to match
+- ✅ decisions gathered from Brad
+- ✅ ADR statuses updated to Accepted/Deferred
+- ✅ downstream iterations adjusted to match
 
 ## Goal
 
 Turn the five Proposed ADRs into decisions before code that depends on them. This
 is a decision-gating iteration — output is updated ADRs, not code.
 
-## Decisions to make (with recommendation)
+## Decisions made
 
-- **[[doc/adr/0001-terminal-backend]]** — crossterm (fastest to correct) vs. raw
-  ANSI (smallest). Recommendation: crossterm first, optional raw-ANSI size pass.
-- **[[doc/adr/0002-text-encoding-soft-space]]** — byte buffer + UTF-8-safe soft
-  spaces (recommended, "B"), possibly starting ASCII-only ("A") for a first
-  milestone.
-- **[[doc/adr/0003-reserved-control-keys]]** — disable flow control for full
-  WordStar keys, keep a safe abort + guaranteed restore (recommended, "B").
-- **[[doc/adr/0004-v1-feature-scope]]** — confirm the core/defer/drop buckets;
-  in particular confirm printing/PS/hyphenation are dropped and macros/directory/
-  windowing are deferred.
-- **[[doc/adr/0005-buffer-data-structure]]** — gap buffer (recommended, "A").
+- **[[doc/adr/0001-terminal-backend]]** — **crossterm** (matched recommendation).
+- **[[doc/adr/0002-text-encoding-soft-space]]** — **C**: native UTF-8, drop the
+  soft-space compression scheme entirely (diverged from the recommended "B";
+  Brad wanted no high-bit tricks over Rust's native string types).
+- **[[doc/adr/0003-reserved-control-keys]]** — **B**: disable flow control for
+  full WordStar keys, keep a safe abort + guaranteed restore (matched
+  recommendation).
+- **[[doc/adr/0004-v1-feature-scope]]** — proposed core/defer/drop buckets
+  adopted as-is (matched recommendation).
+- **[[doc/adr/0005-buffer-data-structure]]** — **A′**: gap buffer of `char`
+  (diverged from the recommended plain-byte "A" — a variant developed in
+  discussion once 0002 ruled out byte-level tricks; keeps the gap-buffer
+  algorithm, retypes the element from `u8` to `char`).
 
 ## Steps
 

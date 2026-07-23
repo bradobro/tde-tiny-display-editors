@@ -27,9 +27,9 @@ The character-level editing commands, driven through the dispatch from epic 0300
 
 ## Steps — testing
 
-- Each command applied to a fixture buffer produces the expected bytes and cursor
-  position; INS vs. overtype both covered; undelete restores exactly what was
-  removed.
+- Each command applied to a fixture buffer produces the expected characters and
+  cursor position; INS vs. overtype both covered; undelete restores exactly
+  what was removed.
 
 ## Depends on
 - [[doc/iterations/0303-iter-main-loop-dispatch]], [[doc/iterations/0201-iter-gap-buffer-core]].

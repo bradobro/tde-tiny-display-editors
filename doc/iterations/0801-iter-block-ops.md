@@ -28,8 +28,8 @@ region.
 
 - Mark a span then copy/move/erase → expected buffer contents and cursor position;
   endpoints survive intervening edits.
-- Write-block emits exactly the marked bytes to a temp file; read-file inserts the
-  file's bytes at the cursor.
+- Write-block emits exactly the marked text to a temp file; read-file inserts the
+  file's text at the cursor.
 
 ## Depends on
 - [[doc/iterations/0401-iter-insert-delete-undo]], [[doc/iterations/0501-iter-load-save-bak]].

@@ -15,7 +15,7 @@ and variable tab stops, and left/right margin handling.
 
 ## Steps
 
-- `format::display_column(line_bytes, byte_index)` — column accounting for tab
+- `format::display_column(line_chars, char_index)` — column accounting for tab
   expansion (shared with `buffer::column_of`; ASM column update `zde17.asm:5378`).
 - Hard tab (`^I` = `TabKey`) advancing to the next `Config::hard_tab_stop`
   boundary; variable tabs walking `Config::variable_tabs` (ASM `zde17.asm:3856`).

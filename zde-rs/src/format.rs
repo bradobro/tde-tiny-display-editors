@@ -12,13 +12,15 @@
 //! - Hard tabs and variable tab stops (`zde17.asm:3856`, config `variable_tabs`).
 //! - Auto-indent (`AIFlg`, `zde17.asm:4203`) and double-space (`DSFlg`).
 //!
-//! ## The soft-space subtlety
+//! ## No soft-space bookkeeping
 //!
-//! Word wrap and reformat depend on the soft-space representation
-//! (`buffer::SOFT_SPACE`): spaces that the reformatter inserted are "soft" and
-//! may be removed/regenerated freely, while spaces the user typed are hard. Any
-//! reformat routine must respect that distinction (ASM `Cmprs`, `zde17.asm:2129`,
-//! and the soft/hard CR handling). Get this right or reflow corrupts spacing.
+//! The original distinguishes "soft" spaces the reformatter inserted (freely
+//! removable/regenerable) from "hard" spaces the user typed, via a high bit on
+//! the byte (ASM `Cmprs`, `zde17.asm:2129`). [[doc/adr/0002-text-encoding-soft-space]]
+//! drops that distinction: reformat always recomputes spacing from the words on
+//! the line rather than decompressing stored state. Hard CRs are still
+//! preserved — reflow only touches spacing within a paragraph, not paragraph
+//! breaks.
 
 /// Result of a right-margin check: whether the current word should wrap.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

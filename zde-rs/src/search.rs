@@ -9,9 +9,9 @@
 //!   `7883`), and case-insensitive matching (the ASM added case-insensitive
 //!   search in 2.6, see history `zde17.asm:92`).
 //!
-//! The search runs over the gap buffer's logical byte sequence. Remember the
-//! soft-space high bit (`buffer::SOFT_SPACE`): a match must compare against the
-//! *displayed* character, i.e. mask bit 7 on spaces before comparing.
+//! The search runs over the gap buffer's logical `char` sequence
+//! ([[doc/adr/0002-text-encoding-soft-space]]: no soft-space bit to mask —
+//! plain character comparison).
 
 /// Search direction. ASM `FBackw` flag.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -23,8 +23,8 @@ pub enum Direction {
 /// A find/replace request and its options, retained so `^L` can repeat it.
 #[derive(Debug, Clone, Default)]
 pub struct Query {
-    pub find: Vec<u8>,
-    pub replace: Option<Vec<u8>>,
+    pub find: Vec<char>,
+    pub replace: Option<Vec<char>>,
     pub ignore_case: bool,
     pub global: bool,
     pub backward: bool,
@@ -32,7 +32,7 @@ pub struct Query {
 
 // TODO(iter 0701): find_from(buffer, pos, &Query) -> Option<usize>.
 // TODO(iter 0701): interactive replace (confirm each) and global replace.
-// TODO(iter 0701): case-folding compare that also masks the soft-space bit.
+// TODO(iter 0701): case-folding compare (char::to_lowercase) for ignore_case.
 
 #[cfg(test)]
 mod tests {

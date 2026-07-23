@@ -14,8 +14,9 @@ stops, and center/flush lines — plus the auto-indent and double-space toggles.
 - Hard tabs (width from `Config::hard_tab_stop`) and variable tab stops
   (`Config::variable_tabs`).
 - Left-margin auto-spacing; right-margin check that triggers word wrap on insert.
-- Paragraph reformat between margins, preserving hard spaces/CRs and (per ADR
-  0002) regenerating soft spaces.
+- Paragraph reformat between margins, preserving hard CRs; no soft-space state
+  to regenerate (ADR 0002 drops that scheme — reflow always recomputes
+  spacing from the words on the line).
 - Center and flush-right a line.
 
 ## Iterations

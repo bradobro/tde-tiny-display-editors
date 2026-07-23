@@ -51,22 +51,26 @@ doesn't compress storage.
 
 ## Decision
 
-**C.** Use native UTF-8 (`String`/`char`), and drop the soft-space compression
-scheme entirely — reformat reflows text on demand instead of compressing
-runs of regenerable spaces. This departs furthest from the original's
-byte-oriented design, but it's the simplest path to correctly handling
-arbitrary modern text, and it removes a whole class of high-bit/UTF-8
+**C.** Use native UTF-8 encoding — no byte-level high-bit tricks — and drop
+the soft-space compression scheme entirely — reformat reflows text on demand
+instead of compressing runs of regenerable spaces. This departs furthest from
+the original's byte-oriented design, but it's the simplest path to correctly
+handling arbitrary modern text, and it removes a whole class of high-bit/UTF-8
 collision bugs before they can happen. Note: `buffer::SOFT_SPACE = 0x80` is
 currently defined as a placeholder consistent with **A**; it is now dead and
 should be removed when iteration 0201/0202 touches the buffer.
 
+This ADR fixes the *encoding* question only — no high bit, no soft-space
+scheme. It deliberately does not pick a concrete storage type: whether the
+buffer ends up as a gap buffer of `char`, a rope, or something else is
+[[doc/adr/0005-buffer-data-structure]]'s call to make.
+
 ## Consequences
 
-- `GapBuffer` stores `char`s (or a `String`-backed structure), not raw bytes;
-  no routine needs to mask/interpret a high-bit flag — search, reformat, and
-  cursor math all operate on plain characters. Interacts with
-  [[doc/adr/0005-buffer-data-structure]], which still decides the concrete
-  data structure (gap buffer vs. rope vs. `Vec<String>`).
+- `GapBuffer` stores `char`s, not raw bytes (concrete type decided in
+  [[doc/adr/0005-buffer-data-structure]]: gap buffer of `char`); no routine
+  needs to mask/interpret a high-bit flag — search, reformat, and cursor math
+  all operate on plain characters.
 - Opening/saving arbitrary UTF-8 files is straightforward: no encoding
   mapping on load, no soft-space regeneration on save (affects `filesystem`).
 - Reformat (`^B`) always reflows on demand instead of decompressing stored

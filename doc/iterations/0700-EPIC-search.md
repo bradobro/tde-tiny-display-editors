@@ -12,8 +12,8 @@ repeat-last (`^L`), and case-insensitive matching.
 - `^QF` find, `^QA` replace, `^L`/`^\` repeat last operation.
 - Options: direction (`FBackw`), global (`FGlobl`), ignore-case; interactive
   confirm on replace vs. global replace-all.
-- Matching runs over logical buffer bytes and must interpret the soft-space bit
-  (compare against displayed characters), per ADR 0002.
+- Matching runs over logical buffer `char`s directly — no soft-space bit to
+  interpret (ADR 0002: native UTF-8, no high-bit tricks).
 
 ## Iterations
 

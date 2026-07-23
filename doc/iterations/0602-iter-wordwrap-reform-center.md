@@ -37,4 +37,5 @@ margin, reflow a paragraph to the margins, and center/flush a line.
 - [[doc/iterations/0601-iter-tabs-margins-columns]].
 
 ## References
-- `zde17.asm:5336`/`5419`/`5477`/`5691`; soft-space `2129`.
+- `zde17.asm:5336`/`5419`/`5477`/`5691`. `2129` (`Cmprs`, soft-space
+  compression) is reference only — not ported, per ADR 0002.

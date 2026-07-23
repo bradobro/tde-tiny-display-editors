@@ -13,7 +13,7 @@
 //! In a gap buffer, block start/end are best tracked as logical offsets and
 //! recomputed as the buffer changes (the ASM keeps pointers and fixes them up).
 
-/// A marked region as logical byte offsets into the document, if both ends set.
+/// A marked region as logical char offsets into the document, if both ends set.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Block {
     pub start: Option<usize>,

@@ -1,4 +1,4 @@
-# 0202 — Line/column queries & soft-space compression
+# 0202 — Line/column queries
 
 Epic: [[doc/iterations/0200-EPIC-text-engine]]
 Status: planning

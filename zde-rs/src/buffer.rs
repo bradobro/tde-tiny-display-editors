@@ -18,25 +18,25 @@
 //! `BegTx`, `BefCu`, `AftCu`, `EndTx` (`zde17.asm:7961`-`7964`); our fields have
 //! the same roles.
 //!
-//! ## Bytes, not chars — and the soft-space high bit
+//! ## Characters, not bytes — no soft-space high bit
 //!
 //! The original is 8-bit and reserves **bit 7 (0x80)** of a character to mean
 //! "a soft, regenerable space follows this character" — a compression trick used
-//! by the reformatter (`Cmprs`, `zde17.asm:2129`). Because of this the buffer is
-//! byte-oriented, not UTF-8. See ADR on text encoding for how we reconcile that
-//! with modern UTF-8 input. For now the engine is `u8`-based to stay faithful.
+//! by the reformatter (`Cmprs`, `zde17.asm:2129`). We do not port this: modern
+//! text is UTF-8, and stealing a bit from a byte doesn't work once bytes can be
+//! part of a multi-byte sequence. [[doc/adr/0002-text-encoding-soft-space]]
+//! drops the compression scheme entirely, and
+//! [[doc/adr/0005-buffer-data-structure]] retypes the store from bytes to
+//! `char` (full Unicode scalar values) so no routine ever has to reason about
+//! UTF-8 byte boundaries — a gap move or grow is just a `char` copy.
 
-/// Marker bit: set on a character to indicate a hideable/soft space follows it.
-/// ASM sets/tests bit 7 in `Cmprs` (`zde17.asm:2148`, `2173`).
-pub const SOFT_SPACE: u8 = 0x80;
-
-/// A gap buffer over raw bytes.
+/// A gap buffer over Unicode scalar values (`char`), not raw bytes.
 ///
 /// Invariant: `0 <= before <= after <= store.len()`. The logical document is
 /// `store[..before]` followed by `store[after..]`; `store[before..after]` is the
 /// (garbage) gap. The cursor sits at logical position `before`.
 pub struct GapBuffer {
-    store: Vec<u8>,
+    store: Vec<char>,
     before: usize,
     after: usize,
 }
@@ -63,9 +63,9 @@ impl GapBuffer {
         self.before
     }
 
-    // TODO(iter 0201): insert_byte, delete_left, delete_right.
+    // TODO(iter 0201): insert_char, delete_left, delete_right.
     // TODO(iter 0201): move_to / move_left / move_right  (analog of MoveL/MoveR).
-    // TODO(iter 0201): byte_at, iter over logical bytes for the renderer.
+    // TODO(iter 0201): char_at, iter over logical chars for the renderer.
     // TODO(iter 0202): find CR left/right (CrLft/CrRit, zde17.asm:1964) for line ops.
     // TODO(iter 0202): grow_gap when the gap is exhausted (analog of `Space`, zde17.asm:2182).
 }

@@ -10,7 +10,8 @@ rename the edit target, and quit through the original's save/exit flows.
 ## Scope
 
 - `argv` → optional filename; "new file" when it doesn't exist yet.
-- Load bytes into the gap buffer at the cursor (mapping the encoding per ADR 0002).
+- Load a file's UTF-8 text into the gap buffer at the cursor — decode via
+  `str::chars()`, no encoding mapping needed (ADR 0002: native UTF-8).
 - Save: stream buffer to disk; `.BAK` backup by rename-then-write when enabled;
   clear the modified flag.
 - Change-name (`^KN`) sets the target without saving.

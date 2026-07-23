@@ -21,7 +21,7 @@ or read a file in at the cursor.
 ## Exit criteria
 
 - Marking then copy/move/erase produces correct text; write-block emits exactly
-  the marked bytes; read-file inserts at the cursor. Unit-tested at buffer level.
+  the marked text; read-file inserts at the cursor. Unit-tested at buffer level.
 
 ## References
 

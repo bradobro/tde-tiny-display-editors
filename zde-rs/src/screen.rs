@@ -44,8 +44,8 @@ pub trait Screen {
 
 // TODO(iter 0202/0203): a concrete Screen impl over the chosen backend.
 // TODO(iter 0203): header/status-line renderer (StatLn area, zde17.asm:6624 ShowFil).
-// TODO(iter 0203): text-area renderer that expands tabs and renders the soft-space
-//                  high bit (buffer::SOFT_SPACE) and optional hard-CR glyphs.
+// TODO(iter 0203): text-area renderer that expands tabs and renders optional
+//                  hard-CR glyphs (no soft-space bit — see ADR 0002).
 // TODO(iter 0203): the redisplay bookkeeping — the ASM tracks *how much* to redraw
 //                  via ShoFlg/CuFlg/ScFlg (zde17.asm:7889-7891) for speed. A simple
 //                  first port may redraw dirty lines; keep that behind this module.
