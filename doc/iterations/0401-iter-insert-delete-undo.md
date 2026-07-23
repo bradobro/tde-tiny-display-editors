@@ -1,12 +1,12 @@
 # 0401 — Insert, delete & undelete
 
 Epic: [[doc/iterations/0400-EPIC-core-editing]]
-Status: ready
+Status: done
 
 ## Progress
-- ⬜ design
-- ⬜ implement
-- ⬜ test
+- ✅ design
+- ✅ implement
+- ✅ test
 
 ## Goal
 

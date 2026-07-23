@@ -43,13 +43,18 @@ pub enum InsertMode {
 }
 
 /// The single-level undo/undelete stash (ASM `Undel`/`UndlLn`, `zde17.asm:4249`).
+/// The ASM keeps two separate stashes (one for a single erased char, one for a
+/// whole erased line); this port unifies them into one slot that always holds
+/// whatever was deleted most recently, since `^U` and `^Q^U` both just restore
+/// "the last thing you deleted" from the user's point of view.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Undo {
     None,
     /// A single deleted char and where to reinsert it.
     Char { pos: usize, c: char },
-    /// A deleted line's text (without its trailing newline) and where it went.
-    Line { pos: usize, text: String },
+    /// A run of deleted text (a word, a line, an erased span) and where it
+    /// went; restored by reinserting the whole string at `pos`.
+    Span { pos: usize, text: String },
 }
 
 /// How much of the frame a command needs redrawn. A simpler stand-in for the
@@ -140,6 +145,17 @@ impl Editor {
         self.cfg.hard_tab_stop as usize + 1
     }
 
+    /// Start of the line `n` lines before `offset`'s own line. `GapBuffer::
+    /// cr_left(offset, n)` is one off from this: `n=1` there is a no-op (it
+    /// returns `offset`'s *own* line start, same as `line_start`), because it
+    /// counts the newline immediately behind a line-start offset as already
+    /// "crossed". `cr_right(offset, n)`, by contrast, directly means `n`
+    /// lines after — the two aren't symmetric, so this helper hides the `+1`
+    /// needed on the `cr_left` side wherever "N lines back" is meant.
+    fn line_start_n_back(&self, offset: usize, n: usize) -> usize {
+        self.buffer.cr_left(offset, n + 1)
+    }
+
     /// Recompute `cur_line`/`cur_col` from the buffer cursor and keep the
     /// scroll position covering it (ASM `Orient`, `CurLin`/`CurCol`).
     fn orient(&mut self) {
@@ -159,7 +175,7 @@ impl Editor {
             let bottom_line = top_line + self.cfg.screen_lines as usize - 1;
             if self.cur_line > bottom_line {
                 let back = self.cfg.screen_lines as usize - 1;
-                self.top_offset = self.buffer.cr_left(self.buffer.cursor(), back);
+                self.top_offset = self.line_start_n_back(self.buffer.cursor(), back);
             }
         }
         let width = self.cfg.view_columns as usize;
@@ -359,17 +375,19 @@ impl Editor {
             Key::Esc | Key::Char(' ') => CommandResult::Continue(RedrawHint::CursorOnly),
             Key::Left => self.cmd_line_start(),
             Key::Right => self.cmd_line_end(),
-            Key::Up => self.cmd_unsupported("scroll up a screen"),
-            Key::Down => self.cmd_unsupported("scroll down a screen"),
-            Key::Del => self.cmd_unsupported("erase to line start"),
+            Key::Up => self.cmd_screen_top(),
+            Key::Down => self.cmd_screen_bottom(),
+            Key::Del => self.cmd_erase_bol(),
             Key::Ctrl(b'F') => self.cmd_unsupported("find"),
             Key::Ctrl(b'A') => self.cmd_unsupported("replace"),
             Key::Ctrl(b'R') => self.cmd_top(),
             Key::Ctrl(b'C') => self.cmd_bottom(),
             Key::Ctrl(b'S') => self.cmd_line_start(),
             Key::Ctrl(b'D') => self.cmd_line_end(),
-            Key::Ctrl(b'U') => self.cmd_unsupported("undelete line"),
-            Key::Ctrl(b'Y') => self.cmd_unsupported("erase to end of line"),
+            // ^Q^U (UndlLn) shares the single undo stash with ^U (Undel) — see
+            // the `Undo` doc comment on why this port unifies the two.
+            Key::Ctrl(b'U') => self.cmd_undelete(),
+            Key::Ctrl(b'Y') => self.cmd_erase_eol(),
             _ => self.cmd_unsupported("quick command"),
         }
     }
@@ -378,7 +396,7 @@ impl Editor {
     fn dispatch_onscreen(&mut self, key: Key) -> CommandResult {
         match key {
             Key::Esc | Key::Char(' ') => CommandResult::Continue(RedrawHint::CursorOnly),
-            Key::Up => self.cmd_unsupported("make current line the top"),
+            Key::Up => self.cmd_make_top(),
             Key::Ctrl(b'A') => self.cmd_unsupported("toggle auto-indent"),
             Key::Ctrl(b'C') => self.cmd_unsupported("center line"),
             Key::Ctrl(b'F') => self.cmd_unsupported("flush line right"),
@@ -472,59 +490,314 @@ impl Editor {
         CommandResult::Continue(RedrawHint::Full)
     }
 
-    // The following are wired into the dispatch tables above but implemented
-    // for real in later epics; each currently defers to `cmd_unsupported`.
+    /// Delete the char left of the cursor (`DEL`/backspace, ASM `Delete`,
+    /// `zde17.asm:4283`, falling through to `EChar`'s undo bookkeeping). A
+    /// `None` at the start of the document is a silent no-op, matching the
+    /// ASM's `RET C` on `Left`'s error.
     fn cmd_delete_left(&mut self) -> CommandResult {
-        self.cmd_unsupported("delete char left")
+        match self.buffer.delete_left() {
+            Some(c) => self.record_char_delete(c),
+            None => CommandResult::Continue(RedrawHint::CursorOnly),
+        }
     }
+
+    /// Delete the char right of the cursor (`^G` = `EChar`, `zde17.asm:4287`).
     fn cmd_delete_right(&mut self) -> CommandResult {
-        self.cmd_unsupported("delete char right")
+        match self.buffer.delete_right() {
+            Some(c) => self.record_char_delete(c),
+            None => CommandResult::Continue(RedrawHint::CursorOnly),
+        }
     }
+
+    fn record_char_delete(&mut self, c: char) -> CommandResult {
+        self.modified = true;
+        self.undo = Undo::Char { pos: self.buffer.cursor(), c };
+        self.target_col = None;
+        CommandResult::Continue(RedrawHint::Full)
+    }
+
+    /// Delete forward a word (`^T` = `WordDl`, `zde17.asm:3165`). On a break
+    /// char (space/punctuation), eats just that break run. Mid-word, eats
+    /// only the rest of the word, leaving trailing spaces alone. At the very
+    /// start of a word (previous char is itself a break, or BOF), eats the
+    /// word *and* the break run after it too — matching the ASM's `RET NZ`
+    /// after `WDlB`, which skips the trailing break-run deletion only when
+    /// the cursor began mid-word. At EOL/EOF this falls back to a plain
+    /// delete-right, matching the ASM's `JP Z,EChar` special case.
     fn cmd_delete_word(&mut self) -> CommandResult {
-        self.cmd_unsupported("delete word")
+        let start = self.buffer.cursor();
+        let cur_is_word = self.buffer.char_at(start).is_some_and(|c| c != '\n' && is_word_char(c));
+        let began_mid_word = cur_is_word && start > 0 && self.buffer.char_at(start - 1).is_some_and(is_word_char);
+        let mut deleted = String::new();
+        if cur_is_word {
+            while self.buffer.char_at(self.buffer.cursor()).is_some_and(|c| c != '\n' && is_word_char(c)) {
+                deleted.push(self.buffer.delete_right().unwrap());
+            }
+        }
+        if !began_mid_word {
+            while self.buffer.char_at(self.buffer.cursor()).is_some_and(|c| c != '\n' && !is_word_char(c)) {
+                deleted.push(self.buffer.delete_right().unwrap());
+            }
+        }
+        if deleted.is_empty() {
+            return self.cmd_delete_right();
+        }
+        self.modified = true;
+        self.undo = Undo::Span { pos: start, text: deleted };
+        self.target_col = None;
+        CommandResult::Continue(RedrawHint::Full)
     }
-    fn cmd_undelete(&mut self) -> CommandResult {
-        self.cmd_unsupported("undelete")
+
+    /// Delete `len` chars forward from the cursor, stashing them for undo.
+    /// Shared by the line/end-of-line erase commands below.
+    fn delete_span_right(&mut self, len: usize) -> CommandResult {
+        let pos = self.buffer.cursor();
+        let deleted: String = (0..len).map(|_| self.buffer.delete_right().unwrap()).collect();
+        if !deleted.is_empty() {
+            self.modified = true;
+            self.undo = Undo::Span { pos, text: deleted };
+        }
+        self.target_col = None;
+        CommandResult::Continue(RedrawHint::Full)
     }
+
+    /// Erase the whole current line, including its trailing newline (`^Y` =
+    /// `Eline`, `zde17.asm:4342`).
     fn cmd_erase_line(&mut self) -> CommandResult {
-        self.cmd_unsupported("erase line")
+        let start = self.buffer.line_start(self.buffer.cursor());
+        self.buffer.move_to(start);
+        let end = (self.buffer.line_end(start) + 1).min(self.buffer.len());
+        self.delete_span_right(end - start)
     }
+
+    /// Erase from the cursor to the end of the line, excluding the newline
+    /// (`^Q^Y` = `EOLine`, `zde17.asm:4362`).
+    fn cmd_erase_eol(&mut self) -> CommandResult {
+        let end = self.buffer.line_end(self.buffer.cursor());
+        self.delete_span_right(end - self.buffer.cursor())
+    }
+
+    /// Erase from the start of the line up to the cursor (`^Q DEL` = `EBLine`,
+    /// `zde17.asm:4375`).
+    fn cmd_erase_bol(&mut self) -> CommandResult {
+        let start = self.buffer.line_start(self.buffer.cursor());
+        let len = self.buffer.cursor() - start;
+        let mut chars: Vec<char> = (0..len).map(|_| self.buffer.delete_left().unwrap()).collect();
+        chars.reverse();
+        if !chars.is_empty() {
+            self.modified = true;
+            self.undo = Undo::Span { pos: start, text: chars.into_iter().collect() };
+        }
+        self.target_col = None;
+        CommandResult::Continue(RedrawHint::Full)
+    }
+
+    /// Restore whatever `^G`/`DEL`/`^T`/`^Y`/etc. last deleted (`^U` = `Undel`,
+    /// `zde17.asm:4251`; `^Q^U` = `UndlLn` shares this same stash here).
+    fn cmd_undelete(&mut self) -> CommandResult {
+        match std::mem::replace(&mut self.undo, Undo::None) {
+            Undo::None => self.cmd_unsupported("nothing to undelete"),
+            Undo::Char { pos, c } => {
+                self.buffer.move_to(pos);
+                self.buffer.insert_char(c);
+                self.modified = true;
+                self.target_col = None;
+                CommandResult::Continue(RedrawHint::Full)
+            }
+            Undo::Span { pos, text } => {
+                self.buffer.move_to(pos);
+                for c in text.chars() {
+                    self.buffer.insert_char(c);
+                }
+                self.modified = true;
+                self.target_col = None;
+                CommandResult::Continue(RedrawHint::Full)
+            }
+        }
+    }
+
+    /// Word left (`^A` = `WordLf`, `zde17.asm:3139`): skip back over any
+    /// trailing break run, then back over the word, landing on its start.
     fn cmd_word_left(&mut self) -> CommandResult {
-        self.cmd_unsupported("word left")
+        let mut pos = self.buffer.cursor();
+        while pos > 0 && self.buffer.char_at(pos - 1).is_some_and(|c| c != '\n' && !is_word_char(c)) {
+            pos -= 1;
+        }
+        while pos > 0 && self.buffer.char_at(pos - 1).is_some_and(is_word_char) {
+            pos -= 1;
+        }
+        self.buffer.move_to(pos);
+        self.target_col = None;
+        CommandResult::Continue(RedrawHint::CursorOnly)
     }
+
+    /// Word right (`^F` = `WordRt`, `zde17.asm:3114`): skip forward over the
+    /// rest of the current word, then over the break run that follows,
+    /// landing on the start of the next word.
     fn cmd_word_right(&mut self) -> CommandResult {
-        self.cmd_unsupported("word right")
+        let mut pos = self.buffer.cursor();
+        let len = self.buffer.len();
+        while pos < len && self.buffer.char_at(pos).is_some_and(is_word_char) {
+            pos += 1;
+        }
+        while pos < len && self.buffer.char_at(pos).is_some_and(|c| c != '\n' && !is_word_char(c)) {
+            pos += 1;
+        }
+        self.buffer.move_to(pos);
+        self.target_col = None;
+        CommandResult::Continue(RedrawHint::CursorOnly)
     }
+
+    /// Line up (`zde17.asm:2937`); a no-op at the first line.
     fn cmd_up(&mut self) -> CommandResult {
-        self.cmd_unsupported("line up")
+        if self.buffer.line_start(self.buffer.cursor()) == 0 {
+            return CommandResult::Continue(RedrawHint::CursorOnly);
+        }
+        let target = self.line_start_n_back(self.buffer.cursor(), 1);
+        self.move_to_line(target)
     }
+
+    /// Line down (`zde17.asm:2955`); a no-op at the last line.
     fn cmd_down(&mut self) -> CommandResult {
-        self.cmd_unsupported("line down")
+        if self.buffer.line_end(self.buffer.cursor()) >= self.buffer.len() {
+            return CommandResult::Continue(RedrawHint::CursorOnly);
+        }
+        let target = self.buffer.cr_right(self.buffer.cursor(), 1);
+        self.move_to_line(target)
     }
+
+    /// Land the cursor on the line starting at `line_start`, at the
+    /// remembered `target_col` (set on the first Up/Down of a run so
+    /// stepping through short lines and back doesn't lose your column),
+    /// clamped to that line's length.
+    fn move_to_line(&mut self, line_start: usize) -> CommandResult {
+        let goal = self.target_col.unwrap_or(self.cur_col - 1);
+        self.target_col = Some(goal);
+        let line_end = self.buffer.line_end(line_start);
+        let width = self.tab_width();
+        let mut pos = line_start;
+        while pos < line_end && self.buffer.column_of(pos, width) < goal {
+            pos += 1;
+        }
+        self.buffer.move_to(pos);
+        CommandResult::Continue(RedrawHint::CursorOnly)
+    }
+
+    /// Page down (`^C` = `PageF`, `zde17.asm:3218`): move the cursor forward
+    /// by almost a screen's worth of lines, leaving `scroll_overlap` lines of
+    /// context visible from the previous page.
     fn cmd_page_forward(&mut self) -> CommandResult {
-        self.cmd_unsupported("page down")
+        let target = self.buffer.cr_right(self.buffer.cursor(), self.page_size());
+        self.move_to_line(target)
     }
+
+    /// Page up (`^R` = `PageB`, `zde17.asm:3240`).
     fn cmd_page_backward(&mut self) -> CommandResult {
-        self.cmd_unsupported("page up")
+        let target = self.line_start_n_back(self.buffer.cursor(), self.page_size());
+        self.move_to_line(target)
     }
+
+    fn page_size(&self) -> usize {
+        (self.cfg.screen_lines as usize).saturating_sub(self.cfg.scroll_overlap as usize).max(1)
+    }
+
+    /// Scroll the view up one line (`^W` = `Scr1LU`, `zde17.asm:3260`),
+    /// nudging the cursor along if it would otherwise fall outside the new
+    /// visible band.
     fn cmd_scroll_up(&mut self) -> CommandResult {
-        self.cmd_unsupported("scroll up one line")
+        self.scroll_view(-1)
     }
+
+    /// Scroll the view down one line (`^Z` = `Scr1LD`).
     fn cmd_scroll_down(&mut self) -> CommandResult {
-        self.cmd_unsupported("scroll down one line")
+        self.scroll_view(1)
     }
+
+    fn scroll_view(&mut self, delta: isize) -> CommandResult {
+        let new_top = if delta < 0 {
+            self.line_start_n_back(self.top_offset, 1)
+        } else {
+            self.buffer.cr_right(self.top_offset, 1)
+        };
+        if new_top == self.top_offset {
+            return CommandResult::Continue(RedrawHint::CursorOnly);
+        }
+        self.top_offset = new_top;
+        self.keep_cursor_in_view();
+        CommandResult::Continue(RedrawHint::Full)
+    }
+
+    /// After a manual scroll, nudge the cursor onto the nearest edge of the
+    /// new visible band if it fell outside it, so the next `ensure_visible`
+    /// (which follows the cursor) doesn't immediately undo the scroll.
+    fn keep_cursor_in_view(&mut self) {
+        let top_line = self.buffer.line_of(self.top_offset);
+        let bottom_line = top_line + self.cfg.screen_lines as usize - 1;
+        if self.cur_line < top_line {
+            self.buffer.move_to(self.top_offset);
+        } else if self.cur_line > bottom_line {
+            self.buffer.move_to(self.line_start_n_back(self.buffer.cursor(), 1));
+        }
+    }
+
+    /// Top of file (`^Q^R` = `Top`, `zde17.asm:2759`).
     fn cmd_top(&mut self) -> CommandResult {
-        self.cmd_unsupported("top of file")
+        self.buffer.move_to(0);
+        self.target_col = None;
+        CommandResult::Continue(RedrawHint::Full)
     }
+
+    /// Bottom of file (`^Q^C` = `Bottom`, `zde17.asm:2770`).
     fn cmd_bottom(&mut self) -> CommandResult {
-        self.cmd_unsupported("bottom of file")
+        self.buffer.move_to(self.buffer.len());
+        self.target_col = None;
+        CommandResult::Continue(RedrawHint::Full)
     }
+
+    /// Start of line (`^Q^S`/left arrow = `QuikLf`, `zde17.asm:2828`).
     fn cmd_line_start(&mut self) -> CommandResult {
-        self.cmd_unsupported("start of line")
+        let start = self.buffer.line_start(self.buffer.cursor());
+        self.buffer.move_to(start);
+        self.target_col = None;
+        CommandResult::Continue(RedrawHint::CursorOnly)
     }
+
+    /// End of line (`^Q^D`/right arrow = `QuikRt`, `zde17.asm:2837`).
     fn cmd_line_end(&mut self) -> CommandResult {
-        self.cmd_unsupported("end of line")
+        let end = self.buffer.line_end(self.buffer.cursor());
+        self.buffer.move_to(end);
+        self.target_col = None;
+        CommandResult::Continue(RedrawHint::CursorOnly)
     }
+
+    /// Jump to the line currently at the top of the screen (`^Q` Up arrow =
+    /// `QuikUp`, `zde17.asm:2845`), keeping the target column.
+    fn cmd_screen_top(&mut self) -> CommandResult {
+        let top = self.top_offset;
+        self.move_to_line(top)
+    }
+
+    /// Jump to the line currently at the bottom of the screen (`^Q` Down
+    /// arrow = `QuikDn`, `zde17.asm:2859`).
+    fn cmd_screen_bottom(&mut self) -> CommandResult {
+        let bottom = self.buffer.cr_right(self.top_offset, self.cfg.screen_lines as usize - 1);
+        self.move_to_line(bottom)
+    }
+
+    /// Make the cursor's current line the top of the screen (`^O` Up arrow =
+    /// `MakTop`, `zde17.asm:3347`), without moving the cursor itself.
+    fn cmd_make_top(&mut self) -> CommandResult {
+        self.top_offset = self.buffer.line_start(self.buffer.cursor());
+        CommandResult::Continue(RedrawHint::Full)
+    }
+}
+
+/// A "word" character for the `^A`/`^F`/`^T` word-motion commands: letters,
+/// digits, and underscore. Everything else (including whitespace and
+/// punctuation) is a break, matching the ASM's `IsPara`/`IsPunc` checks
+/// (`zde17.asm:3211`).
+fn is_word_char(c: char) -> bool {
+    c.is_alphanumeric() || c == '_'
 }
 
 #[cfg(test)]
@@ -641,5 +914,195 @@ mod tests {
         let mut ed = Editor::new(Config::default());
         ed.cmd_show_help(Menu::Main);
         assert!(ed.message.unwrap().contains("Main commands"));
+    }
+
+    /// Build an editor over `text` with the cursor at `cursor`, orienting so
+    /// `cur_line`/`cur_col` (and thus `move_to_line`'s target column) reflect
+    /// that position, as `run()`'s loop would before every dispatch.
+    fn editor_with(text: &str, cursor: usize) -> Editor {
+        let mut ed = Editor::new(Config::default());
+        ed.buffer = GapBuffer::from_str(text);
+        ed.buffer.move_to(cursor);
+        ed.orient();
+        ed
+    }
+
+    #[test]
+    fn delete_left_and_right_stash_undo_and_restore() {
+        let mut ed = editor_with("abc", 1); // cursor between a|bc
+        ed.cmd_delete_right(); // removes 'b' -> "ac"
+        assert_eq!(ed.buffer.chars().collect::<String>(), "ac");
+        ed.cmd_undelete();
+        assert_eq!(ed.buffer.chars().collect::<String>(), "abc");
+
+        ed.buffer.move_to(1);
+        ed.cmd_delete_left(); // removes 'a' -> "bc"
+        assert_eq!(ed.buffer.chars().collect::<String>(), "bc");
+        ed.cmd_undelete();
+        assert_eq!(ed.buffer.chars().collect::<String>(), "abc");
+    }
+
+    #[test]
+    fn delete_left_at_start_of_document_is_a_no_op() {
+        let mut ed = editor_with("abc", 0);
+        let result = ed.cmd_delete_left();
+        assert_eq!(result, CommandResult::Continue(RedrawHint::CursorOnly));
+        assert_eq!(ed.buffer.chars().collect::<String>(), "abc");
+    }
+
+    #[test]
+    fn delete_word_eats_rest_of_word_and_trailing_spaces() {
+        let mut ed = editor_with("foo bar  baz", 1); // cursor after 'f'
+        ed.cmd_delete_word();
+        assert_eq!(ed.buffer.chars().collect::<String>(), "f bar  baz");
+        ed.cmd_undelete();
+        assert_eq!(ed.buffer.chars().collect::<String>(), "foo bar  baz");
+    }
+
+    #[test]
+    fn delete_word_on_a_space_run_eats_only_the_spaces() {
+        let mut ed = editor_with("foo   bar", 3); // cursor right after "foo"
+        ed.cmd_delete_word();
+        assert_eq!(ed.buffer.chars().collect::<String>(), "foobar");
+    }
+
+    #[test]
+    fn delete_word_at_end_of_line_falls_back_to_delete_right() {
+        let mut ed = editor_with("foo\nbar", 3); // cursor right before the newline
+        ed.cmd_delete_word();
+        assert_eq!(ed.buffer.chars().collect::<String>(), "foobar");
+    }
+
+    #[test]
+    fn erase_line_removes_whole_line_including_newline() {
+        let mut ed = editor_with("aa\nbb\ncc", 4); // cursor inside "bb"
+        ed.cmd_erase_line();
+        assert_eq!(ed.buffer.chars().collect::<String>(), "aa\ncc");
+        ed.cmd_undelete();
+        assert_eq!(ed.buffer.chars().collect::<String>(), "aa\nbb\ncc");
+    }
+
+    #[test]
+    fn erase_eol_and_erase_bol() {
+        let mut ed = editor_with("hello world", 5); // cursor after "hello"
+        ed.cmd_erase_eol();
+        assert_eq!(ed.buffer.chars().collect::<String>(), "hello");
+
+        let mut ed = editor_with("hello world", 5);
+        ed.cmd_erase_bol();
+        assert_eq!(ed.buffer.chars().collect::<String>(), " world");
+    }
+
+    #[test]
+    fn word_left_and_right_jump_over_spaces_and_words() {
+        let mut ed = editor_with("foo bar baz", 11); // at end
+        ed.cmd_word_left();
+        assert_eq!(ed.buffer.cursor(), 8); // start of "baz"
+        ed.cmd_word_left();
+        assert_eq!(ed.buffer.cursor(), 4); // start of "bar"
+        ed.cmd_word_right();
+        assert_eq!(ed.buffer.cursor(), 8); // start of "baz"
+    }
+
+    #[test]
+    fn up_down_preserve_target_column_through_short_lines() {
+        let mut ed = editor_with("hello\nhi\nworld", 3); // "hel|lo", col 3
+        ed.cmd_down(); // "hi" is shorter than col 3; clamp to its end
+        assert_eq!(ed.buffer.cursor(), 8); // right after "hi", before its newline
+        ed.cmd_down(); // "world" is long enough; back to col 3
+        assert_eq!(ed.buffer.cursor(), 12); // the second 'l' in "world"
+    }
+
+    #[test]
+    fn up_moves_to_the_actual_previous_line() {
+        // aa=0-1 \n=2 bbbb=3-6 \n=7 cc=8-9
+        let mut ed = editor_with("aa\nbbbb\ncc", 9); // col 1 on "cc"
+        ed.cmd_up();
+        assert_eq!(ed.buffer.cursor(), 4); // col 1 on "bbbb"
+        ed.cmd_up();
+        assert_eq!(ed.buffer.cursor(), 1); // col 1 on "aa"
+    }
+
+    #[test]
+    fn up_at_top_and_down_at_bottom_are_no_ops() {
+        let mut ed = editor_with("only line", 3);
+        assert_eq!(ed.cmd_up(), CommandResult::Continue(RedrawHint::CursorOnly));
+        assert_eq!(ed.buffer.cursor(), 3);
+        assert_eq!(ed.cmd_down(), CommandResult::Continue(RedrawHint::CursorOnly));
+        assert_eq!(ed.buffer.cursor(), 3);
+    }
+
+    #[test]
+    fn top_and_bottom_of_file() {
+        let mut ed = editor_with("aa\nbb\ncc", 4);
+        ed.cmd_top();
+        assert_eq!(ed.buffer.cursor(), 0);
+        ed.cmd_bottom();
+        assert_eq!(ed.buffer.cursor(), ed.buffer.len());
+    }
+
+    #[test]
+    fn line_start_and_end() {
+        let mut ed = editor_with("aa\nbbbb\ncc", 5); // inside "bbbb"
+        ed.cmd_line_start();
+        assert_eq!(ed.buffer.cursor(), 3);
+        ed.cmd_line_end();
+        assert_eq!(ed.buffer.cursor(), 7);
+    }
+
+    impl Editor {
+        fn cur_line_at(&self) -> usize {
+            self.buffer.line_of(self.buffer.cursor())
+        }
+    }
+
+    fn editor_with_screen_lines(text: &str, screen_lines: u8, scroll_overlap: u8) -> Editor {
+        let cfg = Config { screen_lines, scroll_overlap, ..Config::default() };
+        let mut ed = Editor::new(cfg);
+        ed.buffer = GapBuffer::from_str(text);
+        ed
+    }
+
+    #[test]
+    fn page_forward_and_backward_move_by_page_size() {
+        let text = "0\n1\n2\n3\n4\n5\n6\n7\n8\n9";
+        let mut ed = editor_with_screen_lines(text, 3, 1);
+        ed.cmd_page_forward(); // page_size = 3-1 = 2 lines
+        assert_eq!(ed.cur_line_at(), 3);
+        ed.cmd_page_backward();
+        assert_eq!(ed.cur_line_at(), 1);
+    }
+
+    #[test]
+    fn scroll_up_and_down_shift_top_offset() {
+        let text = "0\n1\n2\n3\n4\n5\n6\n7\n8\n9";
+        let mut ed = editor_with_screen_lines(text, 3, 2);
+        ed.cmd_scroll_down();
+        assert_eq!(ed.top_offset, 2); // start of line "1"
+        ed.cmd_scroll_up();
+        assert_eq!(ed.top_offset, 0);
+    }
+
+    #[test]
+    fn screen_top_and_bottom_jump_within_visible_band() {
+        let text = "0\n1\n2\n3\n4\n5\n6\n7\n8\n9";
+        let mut ed = editor_with_screen_lines(text, 3, 2);
+        ed.top_offset = 2; // showing lines "1","2","3"
+        ed.buffer.move_to(4); // inside "2"
+        ed.cmd_screen_top();
+        assert_eq!(ed.cur_line_at(), 2); // line "1"
+        ed.cmd_screen_bottom();
+        assert_eq!(ed.cur_line_at(), 4); // line "3"
+    }
+
+    #[test]
+    fn make_top_scrolls_view_without_moving_cursor() {
+        let text = "0\n1\n2\n3\n4\n5\n6\n7\n8\n9";
+        let mut ed = editor_with_screen_lines(text, 3, 2);
+        ed.top_offset = 0; // showing lines "0","1","2"
+        ed.buffer.move_to(4); // inside "2"
+        ed.cmd_make_top();
+        assert_eq!(ed.top_offset, 4); // start of line "2"
+        assert_eq!(ed.buffer.cursor(), 4); // cursor untouched
     }
 }

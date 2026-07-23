@@ -11,7 +11,7 @@ Legend: ✅ done · ⬜ not done. Trailing parentheticals are color, not status.
 - ✅ [[doc/iterations/0100-EPIC-scaffolding]] — project skeleton, ADRs, terminal backend
 - ✅ [[doc/iterations/0200-EPIC-text-engine]] — the gap-buffer text engine
 - ✅ [[doc/iterations/0300-EPIC-screen-loop]] — screen rendering, status line, main loop + dispatch
-- ⬜ [[doc/iterations/0400-EPIC-core-editing]] — insert/delete/undo + cursor movement (ready)
+- ✅ [[doc/iterations/0400-EPIC-core-editing]] — insert/delete/undo + cursor movement
 - ⬜ [[doc/iterations/0500-EPIC-file-io]] — load/save/BAK/change-name/quit (ready)
 - ⬜ [[doc/iterations/0600-EPIC-formatting]] — wordwrap, reformat, margins, tabs, center (ready)
 - ⬜ [[doc/iterations/0700-EPIC-search]] — find/replace/repeat (ready)
@@ -36,8 +36,8 @@ Legend: ✅ done · ⬜ not done. Trailing parentheticals are color, not status.
 - ✅ [[doc/iterations/0303-iter-main-loop-dispatch]] — Ready: loop + Case dispatch + prefix menus
 
 ### 0400 — Core Editing
-- ⬜ [[doc/iterations/0401-iter-insert-delete-undo]] — insert/overtype/delete/backspace/undelete (ready)
-- ⬜ [[doc/iterations/0402-iter-cursor-movement]] — char/word/line/page/screen, top/bottom, line erase (ready)
+- ✅ [[doc/iterations/0401-iter-insert-delete-undo]] — insert/overtype/delete/backspace/undelete
+- ✅ [[doc/iterations/0402-iter-cursor-movement]] — char/word/line/page/screen, top/bottom, line erase
 
 ### 0500 — File I/O
 - ⬜ [[doc/iterations/0501-iter-load-save-bak]] — argv filename, load, save, BAK, change-name, quit/exit/done (ready)
