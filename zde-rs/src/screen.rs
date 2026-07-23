@@ -155,9 +155,11 @@ fn expand_tabs(s: &str, tab_width: usize) -> String {
 ///
 /// Rows past the end of the document come back empty, so the caller can
 /// blank the remainder of the text area without special-casing anything.
-/// A hard line break shows as `¶` when `Config::show_hard_cr` is set (no
-/// soft-space glyph — ADR 0002 drops that scheme, so every space is plain).
-pub fn render_text_area(buffer: &GapBuffer, top_offset: usize, hscroll: usize, cfg: &Config) -> Vec<String> {
+/// A hard line break shows as `¶` when `show_hard_cr` is set (no soft-space
+/// glyph — ADR 0002 drops that scheme, so every space is plain). This is the
+/// live, user-toggleable value (`^OD`, `Editor::show_hard_cr`), not
+/// `Config::show_hard_cr` — that field is only the startup default.
+pub fn render_text_area(buffer: &GapBuffer, top_offset: usize, hscroll: usize, cfg: &Config, show_hard_cr: bool) -> Vec<String> {
     let tab_width = cfg.hard_tab_stop as usize + 1;
     let mut rows = Vec::with_capacity(cfg.screen_lines as usize);
     let mut offset = top_offset;
@@ -169,7 +171,7 @@ pub fn render_text_area(buffer: &GapBuffer, top_offset: usize, hscroll: usize, c
         let end = buffer.line_end(offset);
         let raw: String = (offset..end).filter_map(|i| buffer.char_at(i)).collect();
         let mut line = expand_tabs(&raw, tab_width);
-        if cfg.show_hard_cr && end < buffer.len() {
+        if show_hard_cr && end < buffer.len() {
             line.push('¶');
         }
         let visible: String = line.chars().skip(hscroll).take(cfg.view_columns as usize).collect();
@@ -255,7 +257,7 @@ mod tests {
     #[test]
     fn renders_lines_and_pads_past_end_of_document() {
         let b = GapBuffer::from_str("one\ntwo\n");
-        let rows = render_text_area(&b, 0, 0, &cfg(4, 20));
+        let rows = render_text_area(&b, 0, 0, &cfg(4, 20), false);
         assert_eq!(rows, vec!["one", "two", "", ""]);
     }
 
@@ -264,16 +266,15 @@ mod tests {
         let b = GapBuffer::from_str("a\tb");
         let mut c = cfg(1, 20);
         c.hard_tab_stop = 3; // width 4
-        let rows = render_text_area(&b, 0, 0, &c);
+        let rows = render_text_area(&b, 0, 0, &c, false);
         assert_eq!(rows[0], "a   b");
     }
 
     #[test]
     fn shows_hard_cr_glyph_when_enabled() {
         let b = GapBuffer::from_str("hi\nthere");
-        let mut c = cfg(2, 20);
-        c.show_hard_cr = true;
-        let rows = render_text_area(&b, 0, 0, &c);
+        let c = cfg(2, 20);
+        let rows = render_text_area(&b, 0, 0, &c, true);
         assert_eq!(rows[0], "hi¶");
         assert_eq!(rows[1], "there"); // last line has no trailing CR
     }
@@ -281,7 +282,7 @@ mod tests {
     #[test]
     fn clips_to_view_columns_and_honors_hscroll() {
         let b = GapBuffer::from_str("abcdefghij");
-        let rows = render_text_area(&b, 0, 2, &cfg(1, 5));
+        let rows = render_text_area(&b, 0, 2, &cfg(1, 5), false);
         assert_eq!(rows[0], "cdefg");
     }
 

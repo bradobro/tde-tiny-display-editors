@@ -242,7 +242,7 @@ impl Editor {
     }
 
     fn draw_text_area(&self, screen: &mut dyn Screen, row: usize) -> io::Result<()> {
-        let rows = screen::render_text_area(&self.buffer, self.top_offset, self.hscroll, &self.cfg);
+        let rows = screen::render_text_area(&self.buffer, self.top_offset, self.hscroll, &self.cfg, self.show_hard_cr);
         for (i, line) in rows.iter().enumerate() {
             screen.move_to((row + i) as u16, 0)?;
             screen.clear_line()?;
@@ -512,14 +512,14 @@ impl Editor {
             Key::Ctrl(b'A') => self.cmd_toggle_auto_indent(),
             Key::Ctrl(b'C') => self.cmd_center_or_flush(false),
             Key::Ctrl(b'F') => self.cmd_center_or_flush(true),
-            Key::Ctrl(b'D') => self.cmd_unsupported("toggle show hard CR"),
+            Key::Ctrl(b'D') => self.cmd_toggle_show_hard_cr(),
             Key::Ctrl(b'L') => return self.cmd_set_margin(keys, screen, "Left margin: ", true),
             Key::Ctrl(b'R') => return self.cmd_set_margin(keys, screen, "Right margin: ", false),
             Key::Ctrl(b'S') => self.cmd_toggle_double_space(),
             Key::Ctrl(b'T') => self.cmd_toggle_ruler(),
-            Key::Ctrl(b'V') => self.cmd_unsupported("toggle variable tabs"),
-            Key::Ctrl(b'I') => self.cmd_unsupported("set variable tab stop"),
-            Key::Ctrl(b'N') => self.cmd_unsupported("clear variable tabs"),
+            Key::Ctrl(b'V') => self.cmd_toggle_variable_tabs(),
+            Key::Ctrl(b'I') => return self.cmd_set_variable_tab(keys, screen),
+            Key::Ctrl(b'N') => return self.cmd_clear_variable_tab(keys, screen),
             Key::Ctrl(b'H') => self.cmd_dropped("hyphenation"),
             Key::Ctrl(b'J') => self.cmd_dropped("proportional spacing"),
             Key::Ctrl(b'P') => self.cmd_dropped("printer page format"),
@@ -786,8 +786,65 @@ impl Editor {
         CommandResult::Continue(RedrawHint::Full)
     }
 
+    /// `^OD` — toggle whether a hard carriage return shows as `¶` in the text
+    /// area (ASM `HCRTog`, `zde17.asm:5122`).
+    fn cmd_toggle_show_hard_cr(&mut self) -> CommandResult {
+        self.show_hard_cr = !self.show_hard_cr;
+        CommandResult::Continue(RedrawHint::Full)
+    }
+
+    /// `^OV` — toggle variable-tab mode (ASM `VTTog`, `zde17.asm:3859`); see
+    /// [`Editor::cmd_tab`] for what `^I` does differently while it's on.
+    fn cmd_toggle_variable_tabs(&mut self) -> CommandResult {
+        self.variable_tabs_on = !self.variable_tabs_on;
+        CommandResult::Continue(RedrawHint::Full)
+    }
+
+    /// An empty prompt answer defaults to the cursor's current column,
+    /// matching the ASM's "default is Here" convention (`VTSet`/`VTClr`,
+    /// `zde17.asm:3930`,`4015`).
+    fn parse_column_or_here(&self, input: &str) -> Option<u8> {
+        let trimmed = input.trim();
+        if trimmed.is_empty() {
+            return u8::try_from(self.cur_col).ok();
+        }
+        trimmed.parse::<u8>().ok()
+    }
+
+    /// `^OI` — add a variable tab stop (ASM `VTSet`, `zde17.asm:3926`),
+    /// simplified to the single-column form: the ASM's `@n` (evenly spaced)
+    /// and `#` (explicit group) shorthand aren't ported.
+    fn cmd_set_variable_tab(&mut self, keys: &mut dyn KeySource, screen: &mut dyn Screen) -> io::Result<CommandResult> {
+        let Some(input) = self.read_line(screen, keys, "Set tab at column: ")? else {
+            return Ok(CommandResult::Continue(RedrawHint::Full));
+        };
+        match self.parse_column_or_here(&input) {
+            Some(col) if format::insert_tab_stop(&mut self.cfg.variable_tabs, col) => {}
+            Some(col) => self.message = Some(format!("can't set a tab stop at column {col}")),
+            None => self.message = Some(format!("not a column number: {input}")),
+        }
+        Ok(CommandResult::Continue(RedrawHint::Full))
+    }
+
+    /// `^ON` — remove a variable tab stop (ASM `VTClr`, `zde17.asm:4013`).
+    fn cmd_clear_variable_tab(&mut self, keys: &mut dyn KeySource, screen: &mut dyn Screen) -> io::Result<CommandResult> {
+        let Some(input) = self.read_line(screen, keys, "Clear tab at column: ")? else {
+            return Ok(CommandResult::Continue(RedrawHint::Full));
+        };
+        match self.parse_column_or_here(&input) {
+            Some(col) if format::remove_tab_stop(&mut self.cfg.variable_tabs, col) => {}
+            Some(col) => self.message = Some(format!("no tab stop at column {col}")),
+            None => self.message = Some(format!("not a column number: {input}")),
+        }
+        Ok(CommandResult::Continue(RedrawHint::Full))
+    }
+
+    /// `^J` / `^KH` — show the command menu for `menu` (ASM `DoMnu`,
+    /// `zde17.asm:7994`), honoring `Config::help_menus` the same way the ASM
+    /// checks its `Help` flag: full per-key listing when on, else the same
+    /// one-line hint a prefix key already shows while it's pending.
     fn cmd_show_help(&mut self, menu: Menu) -> CommandResult {
-        self.message = Some(help::render_menu(menu, true));
+        self.message = Some(help::render_menu(menu, self.cfg.help_menus));
         CommandResult::Continue(RedrawHint::Full)
     }
 
@@ -1633,6 +1690,53 @@ mod tests {
 
     fn keys_for(s: &str) -> Vec<Key> {
         s.chars().map(Key::Char).chain(std::iter::once(Key::Char('\r'))).collect()
+    }
+
+    #[test]
+    fn toggle_show_hard_cr_and_variable_tabs_flip_their_flags() {
+        let mut ed = Editor::new(Config::default());
+        let original = ed.show_hard_cr;
+        ed.cmd_toggle_show_hard_cr();
+        assert_eq!(ed.show_hard_cr, !original);
+        assert!(!ed.variable_tabs_on);
+        ed.cmd_toggle_variable_tabs();
+        assert!(ed.variable_tabs_on);
+    }
+
+    #[test]
+    fn set_variable_tab_inserts_a_sorted_stop() {
+        let mut ed = Editor::new(Config::default());
+        let mut screen = FakeScreen::new();
+        let mut keys = ScriptedKeys::new(keys_for("9"));
+        ed.cmd_set_variable_tab(&mut keys, &mut screen).unwrap();
+        assert_eq!(ed.cfg.variable_tabs, [6, 9, 11, 16, 21, 0, 0, 0]);
+    }
+
+    #[test]
+    fn set_variable_tab_defaults_to_the_cursor_column_when_left_blank() {
+        let mut ed = editor_with("hello", 3);
+        let mut screen = FakeScreen::new();
+        let mut keys = ScriptedKeys::new(vec![Key::Char('\r')]);
+        ed.cmd_set_variable_tab(&mut keys, &mut screen).unwrap();
+        assert!(ed.cfg.variable_tabs.contains(&4));
+    }
+
+    #[test]
+    fn clear_variable_tab_removes_a_configured_stop() {
+        let mut ed = Editor::new(Config::default());
+        let mut screen = FakeScreen::new();
+        let mut keys = ScriptedKeys::new(keys_for("11"));
+        ed.cmd_clear_variable_tab(&mut keys, &mut screen).unwrap();
+        assert_eq!(ed.cfg.variable_tabs, [6, 16, 21, 0, 0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn clear_variable_tab_reports_a_missing_stop() {
+        let mut ed = Editor::new(Config::default());
+        let mut screen = FakeScreen::new();
+        let mut keys = ScriptedKeys::new(keys_for("99"));
+        ed.cmd_clear_variable_tab(&mut keys, &mut screen).unwrap();
+        assert!(ed.message.unwrap().contains("no tab stop"));
     }
 
     #[test]

@@ -67,6 +67,38 @@ pub fn next_variable_tab_stop(col: usize, variable_tabs: &[u8]) -> Option<usize>
         .find(|&stop| stop > col)
 }
 
+/// Add `col` to the sorted, 0-terminated variable-tab list (simplified
+/// `VTSet`, `zde17.asm:3926`, single-column form only — the ASM's `@n`
+/// evenly-spaced and `#` explicit-group shorthand aren't ported; enter one
+/// column at a time instead). Returns `false` (a no-op) for `col == 0`, a
+/// column already present, or a list with no free slot left.
+pub fn insert_tab_stop(tabs: &mut [u8], col: u8) -> bool {
+    if col == 0 {
+        return false;
+    }
+    let len = tabs.iter().take_while(|&&stop| stop != 0).count();
+    if len == tabs.len() || tabs[..len].contains(&col) {
+        return false;
+    }
+    let pos = tabs[..len].iter().position(|&stop| stop > col).unwrap_or(len);
+    tabs.copy_within(pos..len, pos + 1);
+    tabs[pos] = col;
+    true
+}
+
+/// Remove `col` from the variable-tab list, closing the gap so the list
+/// stays 0-terminated (ASM `VTClr`, `zde17.asm:4013`). Returns `false` if
+/// `col` wasn't a configured stop.
+pub fn remove_tab_stop(tabs: &mut [u8], col: u8) -> bool {
+    let len = tabs.iter().take_while(|&&stop| stop != 0).count();
+    let Some(pos) = tabs[..len].iter().position(|&stop| stop == col) else {
+        return false;
+    };
+    tabs.copy_within(pos + 1..len, pos);
+    tabs[len - 1] = 0;
+    true
+}
+
 /// Whether the column just reached (1-based, matching `Editor::cur_col`) has
 /// pushed the line past the right margin (ASM `ChkRM`, `zde17.asm:5273`).
 /// `right_margin <= 1` means "off" (the ASM's `SetRM`/`WdWrap` convention).
@@ -154,6 +186,30 @@ mod tests {
         assert_eq!(next_variable_tab_stop(0, &stops), Some(6));
         assert_eq!(next_variable_tab_stop(6, &stops), Some(11));
         assert_eq!(next_variable_tab_stop(16, &stops), None);
+    }
+
+    #[test]
+    fn insert_tab_stop_keeps_the_list_sorted() {
+        let mut tabs = [6, 16, 0, 0, 0, 0, 0, 0];
+        assert!(insert_tab_stop(&mut tabs, 11));
+        assert_eq!(tabs, [6, 11, 16, 0, 0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn insert_tab_stop_rejects_zero_duplicates_and_full_lists() {
+        let mut tabs = [6, 11, 16, 21, 0, 0, 0, 0];
+        assert!(!insert_tab_stop(&mut tabs, 0));
+        assert!(!insert_tab_stop(&mut tabs, 11)); // already set
+        let mut full = [1, 2, 3, 4, 5, 6, 7, 8];
+        assert!(!insert_tab_stop(&mut full, 9));
+    }
+
+    #[test]
+    fn remove_tab_stop_closes_the_gap() {
+        let mut tabs = [6, 11, 16, 0, 0, 0, 0, 0];
+        assert!(remove_tab_stop(&mut tabs, 11));
+        assert_eq!(tabs, [6, 16, 0, 0, 0, 0, 0, 0]);
+        assert!(!remove_tab_stop(&mut tabs, 99)); // not present
     }
 
     #[test]

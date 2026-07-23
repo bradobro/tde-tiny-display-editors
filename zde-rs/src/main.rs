@@ -24,10 +24,6 @@
 //! - `filesystem`— load/save/BAK/new-name (replaces CP/M FCB I/O, `zde17.asm:5798`).
 //! - `help`      — help menus and the ruler line (`zde17.asm:7992`).
 
-// Scaffolding phase: the module APIs are stubs, so much is defined-but-unused.
-// Remove this crate-level allow once the editing epics start filling them in.
-#![allow(dead_code)]
-
 mod block;
 mod buffer;
 mod config;

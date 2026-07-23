@@ -29,7 +29,9 @@ pub struct Config {
     pub right_margin: u8,
     /// Vertical scroll overlap when paging. ASM `Ovlap` (`zde17.asm:152`).
     pub scroll_overlap: u8,
-    /// Ring the bell on error. ASM `Ring` (`zde17.asm:155`).
+    /// Ring the bell on error. ASM `Ring` (`zde17.asm:155`). Not yet wired to
+    /// any behavior — no command path rings the terminal bell yet.
+    #[allow(dead_code)]
     pub ring_bell: bool,
     /// Use full help menus (vs. one-line hints). ASM `Help` (`zde17.asm:156`).
     pub help_menus: bool,
@@ -41,7 +43,9 @@ pub struct Config {
     pub view_columns: u8,
     /// Text lines on screen. ASM `Lines` (`zde17.asm:177`).
     pub screen_lines: u8,
-    /// Cursor auto-wraps at right edge. ASM `AuWrap` (`zde17.asm:176`).
+    /// Cursor auto-wraps at right edge. ASM `AuWrap` (`zde17.asm:176`). Not
+    /// yet wired to any behavior — cursor movement doesn't consult this yet.
+    #[allow(dead_code)]
     pub autowrap: bool,
 }
 
