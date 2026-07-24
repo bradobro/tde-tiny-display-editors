@@ -1,0 +1,18 @@
+.{
+    // ZDE — Zig port of ZDE 1.7 (a WordStar-style CP/M editor). Zero external
+    // dependencies by design: raw ANSI escape codes plus termios via std.posix
+    // (see doc/adr/0007-zig-raw-ansi-backend.md).
+    .name = .zde_zig,
+    .version = "0.1.0",
+    // Generated once by the Zig toolchain; never changes. Regenerated for this
+    // Zig port so it has its own package identity distinct from any fork.
+    .fingerprint = 0xba22330d13c99e23, // Changing this has security and trust implications.
+    .minimum_zig_version = "0.16.0",
+    .dependencies = .{},
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "README.md",
+    },
+}
