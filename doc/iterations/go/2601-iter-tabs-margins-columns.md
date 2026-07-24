@@ -1,7 +1,7 @@
 # 0601 — Columns, tabs & margins
 
-Epic: [[doc/iterations/go/0600-EPIC-formatting]]
-Status: planning
+Epic: [[doc/iterations/go/2600-EPIC-go-formatting]]
+Status: ready
 
 ## Progress
 - ⬜ design
@@ -27,7 +27,7 @@ and variable tab stops, and left/right margins.
   tab-stop insert/remove; margin math.
 
 ## Depends on
-- [[doc/iterations/go/0300-EPIC-screen-loop]], [[doc/iterations/go/0200-EPIC-text-engine]].
+- [[doc/iterations/go/2300-EPIC-go-screen-loop]], [[doc/iterations/go/x2200-EPIC-go-text-engine]].
 
 ## References
 - `rust/src/format.rs`. ASM variable tabs `zde17.asm:162`, column `5378`.

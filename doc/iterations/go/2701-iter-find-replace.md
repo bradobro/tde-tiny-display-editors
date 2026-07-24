@@ -1,6 +1,6 @@
 # 0701 — Find & replace command wiring
 
-Epic: [[doc/iterations/go/0700-EPIC-search]]
+Epic: [[doc/iterations/go/2700-EPIC-go-search]]
 Status: ready
 
 ## Progress
@@ -30,7 +30,7 @@ Wire `^QF`/`^QA`/`^L` to the already-implemented `search` engine.
   not-found leaves the buffer unchanged.
 
 ## Depends on
-- [[doc/iterations/go/0400-EPIC-core-editing]].
+- [[doc/iterations/go/2400-EPIC-go-core-editing]].
 
 ## References
 - `rust/src/search.rs`, `rust/src/editor.rs`. ASM `zde17.asm:3351`.

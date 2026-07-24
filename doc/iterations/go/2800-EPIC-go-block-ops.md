@@ -17,7 +17,7 @@ math: mark, copy, move, erase, and file read/write.
 
 ## Iterations
 
-- [[doc/iterations/go/0801-iter-block-ops]]
+- [[doc/iterations/go/2801-iter-block-ops]]
 
 ## Exit criteria
 

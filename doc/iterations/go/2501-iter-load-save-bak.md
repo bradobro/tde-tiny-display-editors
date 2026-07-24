@@ -1,7 +1,7 @@
 # 0501 — Load, save, .bak & quit flows
 
-Epic: [[doc/iterations/go/0500-EPIC-file-io]]
-Status: planning
+Epic: [[doc/iterations/go/2500-EPIC-go-file-io]]
+Status: ready
 
 ## Progress
 - ⬜ design
@@ -33,7 +33,7 @@ UTF-8 decode/encode boundary.
 - Quit-when-modified prompts.
 
 ## Depends on
-- [[doc/iterations/go/0400-EPIC-core-editing]].
+- [[doc/iterations/go/2400-EPIC-go-core-editing]].
 
 ## References
 - `rust/src/filesystem.rs`. Replaces CP/M FCB I/O `zde17.asm:5798`, `6212`.

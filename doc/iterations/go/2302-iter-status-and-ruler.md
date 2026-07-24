@@ -1,6 +1,6 @@
 # 0302 — Status line & ruler
 
-Epic: [[doc/iterations/go/0300-EPIC-screen-loop]]
+Epic: [[doc/iterations/go/2300-EPIC-go-screen-loop]]
 Status: ready
 
 ## Progress
@@ -30,7 +30,7 @@ the framebuffer.
   known document/config (ported from `rust/src/screen.rs`/`help.rs`).
 
 ## Depends on
-- [[doc/iterations/go/0301-iter-term-backend-render]].
+- [[doc/iterations/go/2301-iter-term-backend-render]].
 
 ## References
 - `rust/src/screen.rs` (status line), `rust/src/help.rs` (ruler). ASM status

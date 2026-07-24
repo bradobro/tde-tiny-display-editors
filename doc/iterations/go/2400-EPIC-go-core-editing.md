@@ -1,6 +1,6 @@
 # Epic 0400 — Core editing & cursor movement (Go)
 
-Status: planning
+Status: ready
 
 ## Goal
 
@@ -20,8 +20,8 @@ buffer primitives so the block marks stay synced.
 
 ## Iterations
 
-- [[doc/iterations/go/0401-iter-insert-delete-undo]]
-- [[doc/iterations/go/0402-iter-cursor-movement]]
+- [[doc/iterations/go/2401-iter-insert-delete-undo]]
+- [[doc/iterations/go/2402-iter-cursor-movement]]
 
 ## Exit criteria
 

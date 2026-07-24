@@ -1,6 +1,6 @@
 # Epic 0500 — File I/O (Go)
 
-Status: planning
+Status: ready
 
 ## Goal
 
@@ -18,7 +18,7 @@ UTF-8 decode/encode boundary between the byte world and the `[]rune` buffer.
 
 ## Iterations
 
-- [[doc/iterations/go/0501-iter-load-save-bak]]
+- [[doc/iterations/go/2501-iter-load-save-bak]]
 
 ## Exit criteria
 

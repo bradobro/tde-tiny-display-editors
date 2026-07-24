@@ -1,7 +1,7 @@
 # 0401 — Insert, delete & undelete
 
-Epic: [[doc/iterations/go/0400-EPIC-core-editing]]
-Status: planning
+Epic: [[doc/iterations/go/2400-EPIC-go-core-editing]]
+Status: ready
 
 ## Progress
 - ⬜ design
@@ -31,7 +31,7 @@ marked block's offsets stay synced.
   restores it; a marked block's offsets are correct after inserts and deletes.
 
 ## Depends on
-- [[doc/iterations/go/0300-EPIC-screen-loop]], [[doc/iterations/go/0200-EPIC-text-engine]].
+- [[doc/iterations/go/2300-EPIC-go-screen-loop]], [[doc/iterations/go/x2200-EPIC-go-text-engine]].
 
 ## References
 - `rust/src/editor.rs` (insert/delete/undo `cmd*`), `rust/src/block.rs`.

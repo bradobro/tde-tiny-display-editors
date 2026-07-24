@@ -1,6 +1,6 @@
 # 0201 — Gap buffer core
 
-Epic: [[doc/iterations/go/0200-EPIC-text-engine]]
+Epic: [[doc/iterations/go/x2200-EPIC-go-text-engine]]
 Status: done
 
 ## Progress

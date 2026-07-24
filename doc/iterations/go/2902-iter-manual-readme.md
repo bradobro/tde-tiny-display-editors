@@ -1,7 +1,7 @@
 # 0902 — Manual reuse & Go README
 
-Epic: [[doc/iterations/go/0900-EPIC-help-docs]]
-Status: planning
+Epic: [[doc/iterations/go/2900-EPIC-go-help-docs]]
+Status: ready
 
 ## Progress
 - ⬜ design
@@ -28,7 +28,7 @@ write `go/README.md`.
   `rust/README.md`.
 
 ## Depends on
-- [[doc/iterations/go/0900-EPIC-help-docs]] (feature-complete surface to document).
+- [[doc/iterations/go/2900-EPIC-go-help-docs]] (feature-complete surface to document).
 
 ## References
 - `doc/MANUAL.md`, `rust/README.md`, `[[doc/adr/0008-go-xterm-ansi-backend]]`.

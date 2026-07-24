@@ -1,6 +1,6 @@
 # 0202 — Line & column queries
 
-Epic: [[doc/iterations/go/0200-EPIC-text-engine]]
+Epic: [[doc/iterations/go/x2200-EPIC-go-text-engine]]
 Status: done
 
 ## Progress
@@ -31,7 +31,7 @@ with `'\n'` standing in for the original's CR (per ADR 0002).
   counts from one; `ColumnOf` expands tabs.
 
 ## Depends on
-- [[doc/iterations/go/0201-iter-gap-buffer-core]].
+- [[doc/iterations/go/completed/2201-iter-gap-buffer-core]].
 
 ## References
 - `zde17.asm:1964` (`CrLft`), `2001` (`CrRit`), `2224` (line number), `5378`

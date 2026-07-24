@@ -1,6 +1,6 @@
 # Epic 1000 — Advanced (mostly deferred) (Go)
 
-Status: planning
+Status: ready
 
 ## Goal
 
@@ -19,7 +19,7 @@ entirely, per ADR `0008`).
 
 ## Iterations
 
-- [[doc/iterations/go/1002-iter-directory-view]]
+- [[doc/iterations/go/3002-iter-directory-view]]
 
 ## Exit criteria
 

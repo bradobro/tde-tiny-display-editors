@@ -1,7 +1,7 @@
 # 0402 — Cursor movement
 
-Epic: [[doc/iterations/go/0400-EPIC-core-editing]]
-Status: planning
+Epic: [[doc/iterations/go/2400-EPIC-go-core-editing]]
+Status: ready
 
 ## Progress
 - ⬜ design
@@ -29,7 +29,7 @@ The full WordStar cursor-movement set over the buffer's line/column queries.
   paging respects the overlap; top/bottom clamp.
 
 ## Depends on
-- [[doc/iterations/go/0401-iter-insert-delete-undo]].
+- [[doc/iterations/go/2401-iter-insert-delete-undo]].
 
 ## References
 - `rust/src/editor.rs` (movement `cmd*`, sticky column). ASM cursor motion

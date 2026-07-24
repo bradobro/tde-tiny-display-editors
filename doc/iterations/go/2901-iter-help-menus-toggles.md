@@ -1,7 +1,7 @@
 # 0901 — Help menus, ruler & toggles
 
-Epic: [[doc/iterations/go/0900-EPIC-help-docs]]
-Status: planning
+Epic: [[doc/iterations/go/2900-EPIC-go-help-docs]]
+Status: ready
 
 ## Progress
 - ⬜ design
@@ -27,8 +27,8 @@ user-facing command surface.
   and ruler render asserted as framebuffer bytes.
 
 ## Depends on
-- [[doc/iterations/go/0600-EPIC-formatting]],
-  [[doc/iterations/go/0300-EPIC-screen-loop]].
+- [[doc/iterations/go/2600-EPIC-go-formatting]],
+  [[doc/iterations/go/2300-EPIC-go-screen-loop]].
 
 ## References
 - `rust/src/help.rs`. ASM `DoMnu`/`HelpY` `zde17.asm:7992`.
