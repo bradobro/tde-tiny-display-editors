@@ -10,7 +10,7 @@ Status: done
 
 ## Goal
 
-Understand `../zde17.asm` well enough to port it confidently. Findings below are
+Understand `../research/zde/zde17.asm` well enough to port it confidently. Findings below are
 the reference for the whole project; extend this file if later work uncovers more.
 
 ## Findings (from the planning pass)
@@ -48,4 +48,4 @@ the reference for the whole project; extend this file if later work uncovers mor
 
 ## References
 
-- Whole of `../zde17.asm`; section banners enumerated at lines listed above.
+- Whole of `../research/zde/zde17.asm`; section banners enumerated at lines listed above.

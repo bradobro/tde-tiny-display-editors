@@ -1,6 +1,6 @@
 # ZDE-rs — Epics & Iterations
 
-Port of ZDE 1.7 (see `../../zde17.asm`) to a Rust terminal editor for macOS/Unix.
+Port of ZDE 1.7 (see `../research/zde/zde17.asm`) to a Rust terminal editor for macOS/Unix.
 Planning docs only — no epic is "ready" until Brad flips its status. Decisions
 live as ADRs in `[[doc/adr]]`.
 

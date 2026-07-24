@@ -1,3 +1,7 @@
+# Re-Experiencing Visual Display Editor (VDE)
+
+
+
 total 72
 -rw-r--r--@ 1 bradobro  staff   369B Jul 24 07:51 CHANGELOG.md
 -rw-r--r--@ 1 bradobro  staff   2.9K Jul 24 07:57 CLAUDE.md

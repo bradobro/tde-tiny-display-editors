@@ -37,7 +37,7 @@ iteration file updated as the living record of intent and progress.
   screen/keyboard backend.
 - Config is a hardcoded `config::Config` struct — **never** self-modify the
   executable the way the original installer did (see `doc/adr/0006`).
-- User docs: `rust/MANUAL.md` (command reference) and `rust/README.md`
+- User docs: `doc/MANUAL.md` (command reference) and `rust/README.md`
   (build/run + how the port differs from the original).
 
 ## Working an iteration

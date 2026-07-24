@@ -15,7 +15,7 @@ reference and a build/run readme, honest about how the port differs from ZDE 1.7
 
 ## Steps
 
-- `rust/MANUAL.md`: every implemented command grouped by family (main, `^K`,
+- `doc/MANUAL.md`: every implemented command grouped by family (main, `^K`,
   `^Q`, `^O`, ESC), with the key, what it does, and any deviation. Include the
   status-line legend and the ruler.
 - `rust/README.md`: what it is, build/run (`cargo run -- <file>`), the
@@ -35,11 +35,11 @@ reference and a build/run readme, honest about how the port differs from ZDE 1.7
 - Epics 0300-0800 (documents implemented behavior).
 
 ## References
-- Command tables `zde17.asm:403`/`479`/`577`/`632`/`538`; original `../readme.md`.
+- Command tables `zde17.asm:403`/`479`/`577`/`632`/`538`; original `../research/zde/readme.md`.
 
 ## Notes
 
-- `rust/MANUAL.md` and `rust/README.md` written 2026-07-23. Every key
+- `doc/MANUAL.md` and `rust/README.md` written 2026-07-23. Every key
   documented in MANUAL.md was cross-checked by hand against the live match
   arms in `dispatch`/`dispatch_block`/`dispatch_quick`/`dispatch_onscreen`
   (`src/editor.rs`), not by an automated parser — a script that parses
