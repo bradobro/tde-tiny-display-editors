@@ -28,7 +28,7 @@ Wire the `^K` block commands to the already-implemented `block` offset math.
 
 ## Depends on
 - [[doc/iterations/go/2500-EPIC-go-file-io]] (for `^KW`/`^KR`),
-  [[doc/iterations/go/2400-EPIC-go-core-editing]].
+  [[doc/iterations/go/x2400-EPIC-go-core-editing]].
 
 ## References
 - `rust/src/block.rs`, `rust/src/editor.rs`. ASM MARK/block `zde17.asm:4420`.

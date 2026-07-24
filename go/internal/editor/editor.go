@@ -21,6 +21,8 @@ package editor
 import (
 	"bytes"
 	"io"
+	"strings"
+	"unicode"
 
 	"zde/internal/block"
 	"zde/internal/buffer"
@@ -248,11 +250,16 @@ func (e *Editor) dispatchChar(r rune) {
 	e.insertRune(r)
 }
 
-// dispatchCtrl handles a bare control chord from the main table. Only the
-// prefix keys and ^V (toggle insert) are wired for real here; every other
-// bare control key is out of this epic's scope (ASM's per-key commands like
-// ^A word-left, ^B reform, etc. land with cursor-movement/editing in epic
-// 2400 and beyond).
+// dispatchCtrl handles a bare control chord from the main table (MnuSt,
+// zde17.asm:403 / rust Editor::dispatch, rust/src/editor.rs:294). The prefix
+// keys, ^V (toggle insert), and this epic's edit/movement commands are
+// wired for real; every other bare control key (^B reform, ^T delete-word,
+// ^W/^Z single-line scroll, help, search/replace synonyms, ...) is out of
+// this epic's scope and lands with formatting/search/help in later epics.
+// Note ^S/^D/^E/^X are deliberately NOT bound to movement here: neither the
+// ASM's MnuSt table nor rust/src/editor.rs::dispatch binds those letters —
+// movement by char/line at the bare-key level is arrow-keys-only, and S/D/
+// E/X are reserved by the ^K/^Q prefix families (save, line start/end, ...).
 func (e *Editor) dispatchCtrl(letter rune) (bool, error) {
 	switch letter {
 	case 'K':
@@ -263,6 +270,20 @@ func (e *Editor) dispatchCtrl(letter rune) (bool, error) {
 		return e.dispatchPrefix(help.MenuOnscreen, e.dispatchOnScreen)
 	case 'V':
 		e.toggleInsert()
+	case 'A':
+		e.wordLeft()
+	case 'F':
+		e.wordRight()
+	case 'G':
+		e.deleteRight()
+	case 'U':
+		e.undelete()
+	case 'Y':
+		e.eraseLine()
+	case 'C':
+		e.pageForward()
+	case 'R':
+		e.pageBackward()
 	default:
 		e.message = "not yet implemented"
 	}
@@ -307,13 +328,14 @@ func (e *Editor) showPrefixHint(menu help.Menu) error {
 }
 
 // dispatchBlock is the ^K block-family table (KMnuSt, zde17.asm:479 / rust
-// dispatch_block, rust/src/editor.rs:355). Only the two ways out of the
-// editor are wired for real here — ^KX (save & exit) and ^KQ (quit,
-// discarding changes) — since proving the Ready loop actually exits cleanly
-// is this epic's exit criterion. ^KX does not yet write the file (that's
-// epic 2500's filesystem package); it just quits. Every other block command
-// is a stub — mark/copy/move/erase/read/write/load/save land with block
-// ops and file I/O in epics 2500/2800.
+// dispatch_block, rust/src/editor.rs:355). ^KX (save & exit) and ^KQ (quit,
+// discarding changes) are the two ways out of the editor; ^KB/^KK/^KU mark
+// the block's start/end and unmark it (this epic's minimal slice of block
+// support, just enough for AdjustInsert/AdjustDelete to have something to
+// track in tests — see markBlockStart/markBlockEnd below). ^KX does not yet
+// write the file (that's epic 2500's filesystem package); it just quits.
+// Copy/move/erase/read/write/load/save land with block ops and file I/O in
+// epics 2500/2800.
 func (e *Editor) dispatchBlock(key keyboard.Key) (bool, error) {
 	if key.Kind == keyboard.KCtrl {
 		switch key.R {
@@ -321,15 +343,61 @@ func (e *Editor) dispatchBlock(key keyboard.Key) (bool, error) {
 			return true, nil
 		case 'Q':
 			return true, nil
+		case 'B':
+			e.markBlockStart()
+			return false, nil
+		case 'K':
+			e.markBlockEnd()
+			return false, nil
+		case 'U':
+			e.blk = block.Block{}
+			return false, nil
 		}
 	}
 	e.message = "block command: not yet implemented"
 	return false, nil
 }
 
-// dispatchQuick is the ^Q quick-movement/find table (QMnuSt, zde17.asm:632).
-// A stub for this epic — find/replace/document-jump land in epic 2700.
-func (e *Editor) dispatchQuick(keyboard.Key) (bool, error) {
+// markBlockStart is ^KB (ASM Block, zde17.asm:4420 / rust cmd_mark_block_start,
+// rust/src/editor.rs:383): mark the block's start at the cursor. Re-marking
+// just moves the start; unlike the ASM's inline marker bytes, this port's
+// plain *int endpoint needs no bookkeeping to remove a stray earlier marker.
+func (e *Editor) markBlockStart() {
+	pos := e.buf.Cursor()
+	e.blk.Start = &pos
+}
+
+// markBlockEnd is ^KK (ASM Termin, zde17.asm:4432 / rust cmd_mark_block_end,
+// rust/src/editor.rs:389).
+func (e *Editor) markBlockEnd() {
+	pos := e.buf.Cursor()
+	e.blk.End = &pos
+}
+
+// dispatchQuick is the ^Q quick-movement/find table (QMnuSt, zde17.asm:632 /
+// rust dispatch_quick, rust/src/editor.rs:491). This epic wires the corner
+// of the table it owns — line start/end (^QS/^QD) and document top/bottom
+// (^QR/^QC); find/replace/repeat-find and the rest of the table (^Q^U
+// undelete duplicates the bare ^U already on the main table, ^Q^Y/^Q DEL
+// erase-eol/erase-bol, the ^Q-arrow screen-top/bottom synonyms) stay
+// unimplemented until search (epic 2700) lands.
+func (e *Editor) dispatchQuick(key keyboard.Key) (bool, error) {
+	if key.Kind == keyboard.KCtrl {
+		switch key.R {
+		case 'S':
+			e.lineStart()
+			return false, nil
+		case 'D':
+			e.lineEnd()
+			return false, nil
+		case 'R':
+			e.documentTop()
+			return false, nil
+		case 'C':
+			e.documentBottom()
+			return false, nil
+		}
+	}
 	e.message = "quick command: not yet implemented"
 	return false, nil
 }
@@ -351,44 +419,179 @@ func (e *Editor) toggleInsert() {
 	}
 }
 
-// insertRune is the M0-scope body of cmd_insert (rust/src/editor.rs:571),
-// minus the word-wrap check — margins/reformat are format-epic (2600) work.
-// In overtype mode it first eats the rune under the cursor (unless it's the
-// line's terminating '\n', so overtype never eats past a line's end), then
-// always inserts.
+// insertChar splices one rune into the buffer at the cursor and nudges the
+// marked block's endpoints to match (ports Editor::insert_char,
+// rust/src/editor.rs:543). Every insertion funnels through here rather than
+// calling buf.InsertChar directly, so a marked block stays correct as text
+// shifts around it — the ASM does the equivalent BefCu/AftCu pointer
+// bookkeeping inline in each edit routine; this port centralizes it once.
+func (e *Editor) insertChar(c rune) {
+	at := e.buf.Cursor()
+	e.buf.InsertChar(c)
+	e.blk.AdjustInsert(at, 1)
+}
+
+// deleteCharLeft deletes the rune left of the cursor and keeps the marked
+// block synced (ports Editor::delete_left, rust/src/editor.rs:551). The
+// bool is false at the start of the document. The adjustment offset is
+// at-1 because that's where the deleted rune actually lived — buf.Cursor()
+// (captured before the delete) sits just past it.
+func (e *Editor) deleteCharLeft() (rune, bool) {
+	at := e.buf.Cursor()
+	c, ok := e.buf.DeleteLeft()
+	if ok {
+		e.blk.AdjustDelete(at-1, 1)
+	}
+	return c, ok
+}
+
+// deleteCharRight deletes the rune right of the cursor and keeps the marked
+// block synced (ports Editor::delete_right, rust/src/editor.rs:562).
+func (e *Editor) deleteCharRight() (rune, bool) {
+	at := e.buf.Cursor()
+	c, ok := e.buf.DeleteRight()
+	if ok {
+		e.blk.AdjustDelete(at, 1)
+	}
+	return c, ok
+}
+
+// insertRune is cmd_insert (rust/src/editor.rs:571), minus the word-wrap
+// check — margins/reformat are format-epic (2600) work. In overtype mode it
+// first eats the rune under the cursor through the block-adjusted delete
+// (unless it's the line's terminating '\n', so overtype never eats past a
+// line's end), then always inserts.
 func (e *Editor) insertRune(c rune) {
 	if e.insert == Overtype {
 		if ch, ok := e.buf.CharAt(e.buf.Cursor()); ok && ch != '\n' {
-			e.buf.DeleteRight()
+			e.deleteCharRight()
 		}
 	}
-	e.buf.InsertChar(c)
+	e.insertChar(c)
 	e.modified = true
 	e.targetCol = nil
 }
 
-// insertNewline is cmd_cr's M0-scope body (rust/src/editor.rs:592):
-// auto-indent and double-space are format-epic (2600) features, so for now
-// Enter just opens a line.
+// insertNewline is cmd_cr (rust/src/editor.rs:592): opens a new line.
+// auto-indent copies the previous line's leading whitespace onto the new
+// one when e.autoIndent is set (no toggle command sets it yet outside
+// tests — that lands with epic 2600/2900's ^OA — but the behavior itself is
+// this epic's job); double-space likewise opens a second blank line when
+// e.doubleSpace is set. Word-wrap is format-epic (2600) work.
 func (e *Editor) insertNewline() {
-	e.buf.InsertChar('\n')
+	indent := ""
+	if e.autoIndent {
+		indent = e.leadingWhitespace(e.buf.Cursor())
+	}
+	e.insertChar('\n')
+	if e.doubleSpace {
+		e.insertChar('\n')
+	}
+	for _, c := range indent {
+		e.insertChar(c)
+	}
 	e.modified = true
 	e.targetCol = nil
 }
 
-// deleteLeft/deleteRight are the M0-scope bodies of Backspace/Del and ^G
-// (full undo bookkeeping is epic 2400's cmd_delete_left/right,
-// rust/src/editor.rs:1187): they edit the buffer and mark it modified, but
-// don't yet stash anything in `undo`.
+// leadingWhitespace is the leading run of spaces/tabs on the line containing
+// offset (ASM CntSpc, zde17.asm:5338 / rust leading_whitespace,
+// rust/src/editor.rs:609), copied onto a new line when autoIndent is on.
+func (e *Editor) leadingWhitespace(offset int) string {
+	start := e.buf.LineStart(offset)
+	end := e.buf.LineEnd(start)
+	var sb strings.Builder
+	for i := start; i < end; i++ {
+		c, _ := e.buf.CharAt(i)
+		if c != ' ' && c != '\t' {
+			break
+		}
+		sb.WriteRune(c)
+	}
+	return sb.String()
+}
+
+// deleteLeft is cmd_delete_left (Backspace/DEL, ASM Delete zde17.asm:4283 /
+// rust/src/editor.rs:1187). A no-op at the start of the document.
 func (e *Editor) deleteLeft() {
-	if _, ok := e.buf.DeleteLeft(); ok {
-		e.modified = true
-		e.targetCol = nil
+	if c, ok := e.deleteCharLeft(); ok {
+		e.recordCharDelete(c)
 	}
 }
 
+// deleteRight is cmd_delete_right (^G/KDel, ASM EChar zde17.asm:4287 /
+// rust/src/editor.rs:1195). A no-op at the end of the document.
 func (e *Editor) deleteRight() {
-	if _, ok := e.buf.DeleteRight(); ok {
+	if c, ok := e.deleteCharRight(); ok {
+		e.recordCharDelete(c)
+	}
+}
+
+// recordCharDelete stashes one deleted rune in the one-level undo slot
+// (ports Editor::record_char_delete, rust/src/editor.rs:1202).
+func (e *Editor) recordCharDelete(c rune) {
+	e.modified = true
+	e.undo = undo{kind: undoChar, pos: e.buf.Cursor(), c: c}
+	e.targetCol = nil
+}
+
+// deleteSpanRight deletes up to n runes forward from the cursor and stashes
+// them as a span for undelete (ports Editor::delete_span_right,
+// rust/src/editor.rs:1243); shared by eraseLine and (future) the
+// erase-to-end/start-of-line commands. Stops early if it hits the end of
+// the document, though callers size n from the buffer so that shouldn't
+// happen in practice.
+func (e *Editor) deleteSpanRight(n int) {
+	pos := e.buf.Cursor()
+	var sb strings.Builder
+	for i := 0; i < n; i++ {
+		c, ok := e.deleteCharRight()
+		if !ok {
+			break
+		}
+		sb.WriteRune(c)
+	}
+	if sb.Len() > 0 {
+		e.modified = true
+		e.undo = undo{kind: undoSpan, pos: pos, text: []rune(sb.String())}
+	}
+	e.targetCol = nil
+}
+
+// eraseLine is ^Y (ASM Eline, zde17.asm:4342 / rust cmd_erase_line,
+// rust/src/editor.rs:1256): WordStar's "kill line" — erases the whole
+// current line, including its trailing newline, and stashes it for ^U.
+func (e *Editor) eraseLine() {
+	start := e.buf.LineStart(e.buf.Cursor())
+	e.buf.MoveTo(start)
+	end := e.buf.LineEnd(start) + 1
+	if end > e.buf.Len() {
+		end = e.buf.Len()
+	}
+	e.deleteSpanRight(end - start)
+}
+
+// undelete is ^U (ASM Undel, zde17.asm:4251 / rust cmd_undelete,
+// rust/src/editor.rs:1287): restore whatever was last deleted from the
+// one-level undo stash. Consuming the stash on the way out (rather than
+// just reading it) means a second ^U with nothing new deleted since is a
+// no-op, matching Rust's Undo::None arm.
+func (e *Editor) undelete() {
+	u := e.undo
+	e.undo = undo{}
+	switch u.kind {
+	case undoNone:
+		e.message = "nothing to undelete"
+	case undoChar:
+		e.buf.MoveTo(u.pos)
+		e.insertChar(u.c)
+		e.modified = true
+		e.targetCol = nil
+	case undoSpan:
+		e.buf.MoveTo(u.pos)
+		for _, c := range u.text {
+			e.insertChar(c)
+		}
 		e.modified = true
 		e.targetCol = nil
 	}
@@ -429,6 +632,116 @@ func (e *Editor) landOnLine(lineStart int) {
 		pos++
 	}
 	e.buf.MoveTo(pos)
+}
+
+// wordLeft is ^A (ASM WordLf, zde17.asm:3139 / rust cmd_word_left,
+// rust/src/editor.rs:1311): skip back over any trailing break run (spaces,
+// punctuation — anything that isn't a word char), then back over the word
+// itself, landing on its start.
+func (e *Editor) wordLeft() {
+	pos := e.buf.Cursor()
+	for pos > 0 {
+		c, _ := e.buf.CharAt(pos - 1)
+		if c == '\n' || isWordChar(c) {
+			break
+		}
+		pos--
+	}
+	for pos > 0 {
+		c, _ := e.buf.CharAt(pos - 1)
+		if !isWordChar(c) {
+			break
+		}
+		pos--
+	}
+	e.buf.MoveTo(pos)
+	e.targetCol = nil
+}
+
+// wordRight is ^F (ASM WordRt, zde17.asm:3114 / rust cmd_word_right,
+// rust/src/editor.rs:1327): skip forward over the rest of the current word,
+// then over the break run that follows, landing on the start of the next
+// word.
+func (e *Editor) wordRight() {
+	pos := e.buf.Cursor()
+	length := e.buf.Len()
+	for pos < length {
+		c, _ := e.buf.CharAt(pos)
+		if !isWordChar(c) {
+			break
+		}
+		pos++
+	}
+	for pos < length {
+		c, _ := e.buf.CharAt(pos)
+		if c == '\n' || isWordChar(c) {
+			break
+		}
+		pos++
+	}
+	e.buf.MoveTo(pos)
+	e.targetCol = nil
+}
+
+// isWordChar is a "word" character for the word-motion commands: letters,
+// digits, and underscore — everything else (whitespace, punctuation) is a
+// break (ASM IsPara/IsPunc, zde17.asm:3211 / rust is_word_char,
+// rust/src/editor.rs:1489).
+func isWordChar(c rune) bool {
+	return unicode.IsLetter(c) || unicode.IsDigit(c) || c == '_'
+}
+
+// pageForward is ^C (ASM PageF, zde17.asm:3218 / rust cmd_page_forward,
+// rust/src/editor.rs:1379): move the cursor forward by almost a screen's
+// worth of lines, leaving Config.ScrollOverlap lines of context visible
+// from the previous page. landOnLine drives topOffset back into place via
+// the caller's next orient/ensureVisible.
+func (e *Editor) pageForward() {
+	e.landOnLine(e.buf.CrRight(e.buf.Cursor(), e.pageSize()))
+}
+
+// pageBackward is ^R (ASM PageB, zde17.asm:3240 / rust cmd_page_backward,
+// rust/src/editor.rs:1385).
+func (e *Editor) pageBackward() {
+	e.landOnLine(e.lineStartNBack(e.buf.Cursor(), e.pageSize()))
+}
+
+// pageSize is how many lines a page up/down jumps: a screen's worth minus
+// the configured overlap, at least 1 (rust page_size, rust/src/editor.rs:1390).
+func (e *Editor) pageSize() int {
+	n := e.cfg.ScreenLines - e.cfg.ScrollOverlap
+	if n < 1 {
+		n = 1
+	}
+	return n
+}
+
+// documentTop is ^Q^R (ASM Top, zde17.asm:2759 / rust cmd_top,
+// rust/src/editor.rs:1434).
+func (e *Editor) documentTop() {
+	e.buf.MoveTo(0)
+	e.targetCol = nil
+}
+
+// documentBottom is ^Q^C (ASM Bottom, zde17.asm:2770 / rust cmd_bottom,
+// rust/src/editor.rs:1441).
+func (e *Editor) documentBottom() {
+	e.buf.MoveTo(e.buf.Len())
+	e.targetCol = nil
+}
+
+// lineStart is ^Q^S (ASM QuikLf, zde17.asm:2828 / rust cmd_line_start,
+// rust/src/editor.rs:1448).
+func (e *Editor) lineStart() {
+	e.buf.MoveTo(e.buf.LineStart(e.buf.Cursor()))
+	e.targetCol = nil
+}
+
+// lineEnd is ^Q^D (ASM QuikRt, zde17.asm:2837 / rust cmd_line_end,
+// rust/src/editor.rs:1456).
+func (e *Editor) lineEnd() {
+	e.buf.MoveTo(e.buf.LineEnd(e.buf.Cursor()))
+	e.targetCol = nil
 }
 
 // textAreaTop is the first text-area row: right below the header, and below

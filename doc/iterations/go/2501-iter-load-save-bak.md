@@ -33,7 +33,7 @@ UTF-8 decode/encode boundary.
 - Quit-when-modified prompts.
 
 ## Depends on
-- [[doc/iterations/go/2400-EPIC-go-core-editing]].
+- [[doc/iterations/go/x2400-EPIC-go-core-editing]].
 
 ## References
 - `rust/src/filesystem.rs`. Replaces CP/M FCB I/O `zde17.asm:5798`, `6212`.
