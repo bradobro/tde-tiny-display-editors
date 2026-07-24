@@ -1,6 +1,6 @@
 # Epic 0900 — Help, Toggles & Docs
 
-Status: ready
+Status: done
 
 ## Goal
 

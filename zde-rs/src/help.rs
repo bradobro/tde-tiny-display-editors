@@ -25,7 +25,7 @@ pub enum Menu {
 fn hint(menu: Menu) -> &'static str {
     match menu {
         Menu::Main => "^K block  ^Q quick  ^O onscreen  ^U undel  ^V ins  ESC prefix",
-        Menu::Block => "^K: B mark-beg K mark-end U unmark C copy V move Y erase  L load S save N name R read W write X exit D done Q quit",
+        Menu::Block => "^K: B mark-beg K mark-end U unmark C copy V move Y erase  L load S save N name R read W write F dir X exit D done Q quit",
         Menu::Quick => "^Q: F find A replace R top C bottom S line-start D line-end U undel-line Y erase-eol",
         Menu::OnScreen => "^O: C center F flush L left-margin R right-margin T ruler S dbl-space A auto-indent V var-tabs D show-CR",
         Menu::Escape => "ESC: synonym for ^K (block) commands",
@@ -52,7 +52,7 @@ fn full_text(menu: Menu) -> &'static str {
             "Block (^K) commands:\n",
             "  B mark begin   K mark end     U unmark\n",
             "  C copy block   V move block   Y erase block\n",
-            "  R read file    W write block\n",
+            "  R read file    W write block  F directory\n",
             "  L load file    N change name  S save\n",
             "  X save & exit  D save & new   Q quit"
         ),

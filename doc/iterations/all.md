@@ -16,8 +16,8 @@ Legend: ✅ done · ⬜ not done. Trailing parentheticals are color, not status.
 - ✅ [[doc/iterations/0600-EPIC-formatting]] — wordwrap, reformat, margins, tabs, center
 - ✅ [[doc/iterations/0700-EPIC-search]] — find/replace/repeat
 - ✅ [[doc/iterations/0800-EPIC-block-ops]] — block mark/copy/move/erase/read/write
-- ⬜ [[doc/iterations/0900-EPIC-help-docs]] — help menus, toggles, MANUAL.md, README.md (ready)
-- ⬜ [[doc/iterations/1000-EPIC-advanced-deferred]] — macros, directory view, windowing (deferred)
+- ✅ [[doc/iterations/0900-EPIC-help-docs]] — help menus, toggles, MANUAL.md, README.md
+- ⬜ [[doc/iterations/1000-EPIC-advanced-deferred]] — macros, directory view, windowing (ready; spikes done, directory view shipped, macro/window follow-ups proposed but unstarted)
 
 ## Current epic iterations
 
@@ -53,10 +53,10 @@ Legend: ✅ done · ⬜ not done. Trailing parentheticals are color, not status.
 - ✅ [[doc/iterations/0801-iter-block-ops]] — mark/copy/move/erase/read/write
 
 ### 0900 — Help, Toggles & Docs
-- ⬜ [[doc/iterations/0901-iter-help-ruler-toggles]] — help menus, ruler, mode toggles (ready)
-- ⬜ [[doc/iterations/0902-iter-manual-readme]] — MANUAL.md + README.md (ready)
+- ✅ [[doc/iterations/0901-iter-help-ruler-toggles]] — help menus, ruler, mode toggles
+- ✅ [[doc/iterations/0902-iter-manual-readme]] — MANUAL.md + README.md
 
 ### 1000 — Advanced / Deferred
-- ⬜ [[doc/iterations/1001-spike-macros]] — macro system feasibility
-- ⬜ [[doc/iterations/1002-iter-directory-view]] — `^KF` directory view
-- ⬜ [[doc/iterations/1003-spike-windowing]] — split-window feasibility
+- ✅ [[doc/iterations/1001-spike-macros]] — macro system feasibility spike: partial go (record/replay small effort; language statements no-go); follow-up `iter-macro-record-replay` proposed, not yet created
+- ✅ [[doc/iterations/1002-iter-directory-view]] — `^KF` directory view, shipped
+- ✅ [[doc/iterations/1003-spike-windowing]] — split-window feasibility spike: go, small-to-medium effort; follow-up `iter-split-window` proposed, not yet created

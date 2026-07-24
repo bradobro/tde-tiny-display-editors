@@ -218,15 +218,21 @@ impl Editor {
         screen.clear_line()?;
         screen.write_str(&screen::render_header(&self.header_info()))?;
 
-        let mut row = 1;
+        let row = self.text_area_top();
         if self.ruler_on {
-            self.draw_ruler(screen, row)?;
-            row += 1;
+            self.draw_ruler(screen, row - 1)?;
         }
         self.draw_text_area(screen, row)?;
         self.draw_message(screen, row)?;
         self.place_cursor(screen, row)?;
         screen.flush()
+    }
+
+    /// The first text-area row: right below the header, and below the ruler
+    /// too when it's on. Shared by `redraw` and the `^KF` directory picker
+    /// (`draw_directory_page`), which overlays the same rows.
+    fn text_area_top(&self) -> usize {
+        1 + usize::from(self.ruler_on)
     }
 
     fn draw_ruler(&self, screen: &mut dyn Screen, row: usize) -> io::Result<()> {
@@ -364,7 +370,7 @@ impl Editor {
             Key::Ctrl(b'X') => self.cmd_save_exit(),
             Key::Ctrl(b'D') => return self.cmd_save_new(keys, screen),
             Key::Ctrl(b'Q') => return self.cmd_quit(keys, screen),
-            Key::Ctrl(b'F') => self.cmd_deferred("directory view"),
+            Key::Ctrl(b'F') => return self.cmd_directory_view(keys, screen),
             Key::Ctrl(b'P') => self.cmd_dropped("printing"),
             _ => self.cmd_unsupported("block command"),
         })
@@ -1099,6 +1105,79 @@ impl Editor {
             return Ok(CommandResult::Continue(RedrawHint::Full));
         }
         Ok(CommandResult::Quit)
+    }
+
+    /// `^KF` — browse the current directory and load a chosen file (ASM
+    /// `Dir`, `zde17.asm:4663`). Lists files only (no subdirectory
+    /// navigation — see `filesystem::list_directory`); overlays the text
+    /// area with a grid the user steers with the arrow keys. Enter loads the
+    /// selected file (same unsaved-changes guard as `^KL`); Esc cancels back
+    /// to the document with nothing changed.
+    fn cmd_directory_view(&mut self, keys: &mut dyn KeySource, screen: &mut dyn Screen) -> io::Result<CommandResult> {
+        self.cmd_directory_view_in(Path::new("."), keys, screen)
+    }
+
+    /// The `^KF` implementation proper, parameterized on the directory to
+    /// browse (`cmd_directory_view` always passes `.`). Split out so tests
+    /// can point it at a scratch directory instead of mutating the process's
+    /// real cwd, which `cargo test`'s parallel runner would race on.
+    fn cmd_directory_view_in(&mut self, dir: &Path, keys: &mut dyn KeySource, screen: &mut dyn Screen) -> io::Result<CommandResult> {
+        let names = match filesystem::list_directory(dir, self.cfg.show_hidden_files) {
+            Ok(names) if !names.is_empty() => names,
+            Ok(_) => {
+                self.message = Some("directory is empty".to_string());
+                return Ok(CommandResult::Continue(RedrawHint::Full));
+            }
+            Err(e) => {
+                self.message = Some(format!("directory read failed: {e}"));
+                return Ok(CommandResult::Continue(RedrawHint::Full));
+            }
+        };
+        let Some(chosen) = self.run_directory_picker(&names, keys, screen)? else {
+            return Ok(CommandResult::Continue(RedrawHint::Full));
+        };
+        if self.modified && !self.confirm(screen, keys, "Abandon changes? (Y/N):")? {
+            self.message = Some("load cancelled".to_string());
+            return Ok(CommandResult::Continue(RedrawHint::Full));
+        }
+        filesystem::load_into(self, &dir.join(&chosen))?;
+        Ok(CommandResult::Continue(RedrawHint::Full))
+    }
+
+    /// Drive the directory grid until the user picks a file (Enter) or backs
+    /// out (Esc). Kept separate from `cmd_directory_view` so the picking loop
+    /// itself doesn't tangle with the load/confirm bookkeeping around it.
+    fn run_directory_picker(&self, names: &[String], keys: &mut dyn KeySource, screen: &mut dyn Screen) -> io::Result<Option<String>> {
+        let rows = self.cfg.screen_lines as usize;
+        let cols = screen::grid_cols(names, self.cfg.view_columns as usize);
+        let mut selected = 0usize;
+        loop {
+            self.draw_directory_page(screen, names, selected, rows)?;
+            match keys.next_key()? {
+                Key::Esc => return Ok(None),
+                Key::Char('\r') => return Ok(Some(names[selected].clone())),
+                key @ (Key::Left | Key::Right | Key::Up | Key::Down) => {
+                    selected = screen::move_selection(selected, names.len(), cols, key);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Paint one page of the directory grid over the text-area rows, plus a
+    /// one-line hint on the message row.
+    fn draw_directory_page(&self, screen: &mut dyn Screen, names: &[String], selected: usize, rows: usize) -> io::Result<()> {
+        let row = self.text_area_top();
+        let page = screen::render_directory_page(names, selected, rows, self.cfg.view_columns as usize);
+        for (i, line) in page.iter().enumerate() {
+            screen.move_to((row + i) as u16, 0)?;
+            screen.clear_line()?;
+            screen.write_str(line)?;
+        }
+        screen.move_to(self.message_row(row) as u16, 0)?;
+        screen.clear_line()?;
+        screen.write_str("Directory: arrows to move, Enter to load, Esc to cancel")?;
+        screen.flush()
     }
 
     /// Delete the char left of the cursor (`DEL`/backspace, ASM `Delete`,
@@ -2267,5 +2346,73 @@ mod tests {
         let result = ed.cmd_load(&mut keys, &mut screen).unwrap();
         assert_eq!(result, CommandResult::Continue(RedrawHint::Full));
         assert_eq!(ed.buffer.chars().collect::<String>(), "unsaved"); // untouched
+    }
+
+    // `^KF` directory picker (1002). Per the iteration's test plan, these
+    // exercise the selection→path mapping through `run_directory_picker`
+    // directly rather than driving `cmd_directory_view`'s real `.`
+    // directory listing, so they don't depend on the test runner's cwd.
+
+    #[test]
+    fn directory_picker_enter_returns_the_selected_name() {
+        let ed = Editor::new(Config::default());
+        let mut screen = FakeScreen::new();
+        let names = vec!["a.txt".to_string(), "b.txt".to_string(), "c.txt".to_string()];
+        let mut keys = ScriptedKeys::new(vec![Key::Right, Key::Char('\r')]);
+        let picked = ed.run_directory_picker(&names, &mut keys, &mut screen).unwrap();
+        assert_eq!(picked.as_deref(), Some("b.txt"));
+    }
+
+    #[test]
+    fn directory_picker_escape_cancels_with_no_selection() {
+        let ed = Editor::new(Config::default());
+        let mut screen = FakeScreen::new();
+        let names = vec!["a.txt".to_string(), "b.txt".to_string()];
+        let mut keys = ScriptedKeys::new(vec![Key::Right, Key::Esc]);
+        let picked = ed.run_directory_picker(&names, &mut keys, &mut screen).unwrap();
+        assert_eq!(picked, None);
+    }
+
+    #[test]
+    fn directory_view_reports_when_the_directory_is_empty() {
+        let dir = TempDir::new("kf-empty");
+        let mut ed = Editor::new(Config::default());
+        let mut screen = FakeScreen::new();
+        let mut keys = ScriptedKeys::new(vec![]);
+        let result = ed.cmd_directory_view_in(&dir.0, &mut keys, &mut screen).unwrap();
+        assert_eq!(result, CommandResult::Continue(RedrawHint::Full));
+        assert_eq!(ed.message.as_deref(), Some("directory is empty"));
+    }
+
+    #[test]
+    fn directory_view_loads_the_chosen_file() {
+        let dir = TempDir::new("kf-pick");
+        std::fs::write(dir.0.join("alpha.txt"), "alpha contents").unwrap();
+        std::fs::write(dir.0.join("beta.txt"), "beta contents").unwrap();
+        let mut ed = Editor::new(Config::default());
+        let mut screen = FakeScreen::new();
+        // Sorted listing is [alpha.txt, beta.txt]; Right then Enter picks beta.txt.
+        let mut keys = ScriptedKeys::new(vec![Key::Right, Key::Char('\r')]);
+        let result = ed.cmd_directory_view_in(&dir.0, &mut keys, &mut screen).unwrap();
+        assert_eq!(result, CommandResult::Continue(RedrawHint::Full));
+        assert_eq!(ed.buffer.chars().collect::<String>(), "beta contents");
+        assert_eq!(ed.filename.as_deref(), Some(dir.0.join("beta.txt").to_str().unwrap()));
+    }
+
+    /// A unique scratch directory per test, cleaned up on drop.
+    struct TempDir(std::path::PathBuf);
+
+    impl TempDir {
+        fn new(name: &str) -> Self {
+            let dir = std::env::temp_dir().join(format!("zde-rs-editor-test-dir-{name}-{}", std::process::id()));
+            std::fs::create_dir_all(&dir).unwrap();
+            TempDir(dir)
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
     }
 }

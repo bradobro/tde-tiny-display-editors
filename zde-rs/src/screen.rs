@@ -181,6 +181,57 @@ pub fn render_text_area(buffer: &GapBuffer, top_offset: usize, hscroll: usize, c
     rows
 }
 
+/// How many grid columns `names` fit into a row `view_columns` wide, for the
+/// `^KF` directory picker (ASM `Dir`, `zde17.asm:4663`). Every cell is padded
+/// to the widest name plus a 2-column gutter (1 for the selection marker, 1
+/// for spacing), so columns stay aligned.
+pub fn grid_cols(names: &[String], view_columns: usize) -> usize {
+    let col_width = names.iter().map(|n| n.chars().count()).max().unwrap_or(1) + 2;
+    (view_columns / col_width).max(1)
+}
+
+/// Move the directory picker's selection by one step in `key`'s direction,
+/// treating `names` as a row-major grid `cols` wide. Movement that would land
+/// past the last entry clamps to it rather than wrapping, so Down/Right at
+/// the edge of a ragged last row just settles on the final file.
+pub fn move_selection(selected: usize, len: usize, cols: usize, key: crate::keyboard::Key) -> usize {
+    use crate::keyboard::Key;
+    if len == 0 {
+        return 0;
+    }
+    let last = len - 1;
+    match key {
+        Key::Right => (selected + 1).min(last),
+        Key::Left => selected.saturating_sub(1),
+        Key::Down => (selected + cols).min(last),
+        Key::Up => selected.saturating_sub(cols),
+        _ => selected,
+    }
+}
+
+/// Render one page of the directory grid: the `rows` of `cols`-wide entries
+/// around `selected`, marking it with a leading `>` (there's no text styling
+/// in this `Screen` trait to highlight it another way). Paging is implicit —
+/// the page follows `selected`, so scrolling the selection past the visible
+/// rows brings the next page's worth of names into view.
+pub fn render_directory_page(names: &[String], selected: usize, rows: usize, view_columns: usize) -> Vec<String> {
+    let cols = grid_cols(names, view_columns);
+    let col_width = (view_columns / cols).saturating_sub(1).max(1);
+    let page_start = (selected / cols / rows.max(1)) * rows * cols;
+    (0..rows).map(|r| render_directory_row(names, page_start, r, cols, col_width, selected)).collect()
+}
+
+fn render_directory_row(names: &[String], page_start: usize, row: usize, cols: usize, col_width: usize, selected: usize) -> String {
+    let mut line = String::new();
+    for col in 0..cols {
+        let i = page_start + row * cols + col;
+        let Some(name) = names.get(i) else { break };
+        line.push(if i == selected { '>' } else { ' ' });
+        line.push_str(&format!("{name:<col_width$}"));
+    }
+    line
+}
+
 /// Everything the status header needs to render, gathered so the formatter
 /// stays a pure function (testable without a live terminal, per the 0302 plan).
 pub struct HeaderInfo<'a> {
@@ -326,5 +377,63 @@ mod tests {
             i.show_hard_cr = true;
         });
         assert!(s.ends_with("AI HCR"));
+    }
+
+    fn names(n: &[&str]) -> Vec<String> {
+        n.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn grid_cols_fits_as_many_as_the_width_allows() {
+        // "aaaaa" (5) + 2-col gutter = 7 wide; 20 / 7 = 2 columns.
+        let n = names(&["aaaaa", "b"]);
+        assert_eq!(grid_cols(&n, 20), 2);
+    }
+
+    #[test]
+    fn grid_cols_never_goes_below_one() {
+        let n = names(&["a-very-long-filename-indeed"]);
+        assert_eq!(grid_cols(&n, 10), 1);
+    }
+
+    #[test]
+    fn move_selection_steps_by_one_row_of_cols() {
+        use crate::keyboard::Key;
+        assert_eq!(move_selection(0, 10, 3, Key::Right), 1);
+        assert_eq!(move_selection(1, 10, 3, Key::Left), 0);
+        assert_eq!(move_selection(0, 10, 3, Key::Down), 3);
+        assert_eq!(move_selection(3, 10, 3, Key::Up), 0);
+    }
+
+    #[test]
+    fn move_selection_clamps_at_the_ends() {
+        use crate::keyboard::Key;
+        assert_eq!(move_selection(0, 5, 3, Key::Left), 0);
+        assert_eq!(move_selection(0, 5, 3, Key::Up), 0);
+        assert_eq!(move_selection(4, 5, 3, Key::Right), 4); // last row is ragged
+        assert_eq!(move_selection(4, 5, 3, Key::Down), 4);
+    }
+
+    #[test]
+    fn render_directory_page_marks_the_selection() {
+        let n = names(&["one.txt", "two.txt", "three.txt", "four.txt"]);
+        let page = render_directory_page(&n, 1, 2, 40);
+        // cols=3 at this width, so row 0 holds one/two/three and row 1 holds
+        // just four (the fourth name wraps to the next grid row).
+        assert!(page[0].starts_with(" one.txt"));
+        assert!(page[0].contains(">two.txt"));
+        assert!(page[1].starts_with(" four.txt"));
+    }
+
+    #[test]
+    fn render_directory_page_scrolls_to_follow_selection() {
+        let n = names(&["a", "b", "c", "d", "e", "f"]);
+        // 1 column wide (huge names not needed here; use a tiny view so each
+        // name gets its own column) — force cols=1 via a very narrow width.
+        let page = render_directory_page(&n, 4, 2, 3);
+        // rows=2, cols=1 -> pages are [a,b] [c,d] [e,f]; selecting index 4 ("e")
+        // should show page ["e", "f"], not page one.
+        assert_eq!(page[0].trim(), ">e");
+        assert_eq!(page[1].trim(), "f");
     }
 }

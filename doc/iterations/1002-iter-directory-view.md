@@ -1,12 +1,12 @@
 # 1002 — Directory view (`^KF`)
 
 Epic: [[doc/iterations/1000-EPIC-advanced-deferred]]
-Status: planning (deferred)
+Status: done
 
 ## Progress
-- ⬜ design
-- ⬜ implement
-- ⬜ test
+- ✅ design
+- ✅ implement
+- ✅ test
 
 ## Goal
 
@@ -30,3 +30,27 @@ Port the `^KF` directory browser: list files and pick one to load.
 
 ## References
 - `zde17.asm:4663` (`Dir`); `^KF` table entry `489`; `DirSys` `153`.
+
+## Notes
+
+- `filesystem::list_directory` lists regular files only (`std::fs::read_dir`,
+  skipping subdirectories) — the ASM's namespace was flat (CP/M had no
+  subdirectories), so this port doesn't add nested drill-down navigation
+  either; that's a bigger feature than "port `Dir`". `Config::show_hidden_files`
+  (default off) stands in for `DirSys`.
+- The picker (`Editor::cmd_directory_view` → `run_directory_picker` →
+  `screen::render_directory_page`/`grid_cols`/`move_selection`) overlays the
+  text-area rows with a grid, same footprint as the document view. Selection
+  is marked with a leading `>` rather than reverse video — the `Screen` trait
+  carries no styling, only plain text — which is a visible but minor fidelity
+  gap versus the original's highlighted cell. The arrow keys move the
+  selection with `screen::move_selection`; there's no separate "page" key —
+  moving past the visible rows/columns just scrolls the grid to follow the
+  selection.
+- `cmd_directory_view` is a thin wrapper over `cmd_directory_view_in(dir, ...)`,
+  which takes the directory as a parameter purely so tests can point it at a
+  scratch temp dir instead of mutating the process's real cwd (which `cargo
+  test`'s parallel runner would race on). Production code always calls it
+  with `.`.
+- Loading picked files reuses `filesystem::load_into` and the same
+  unsaved-changes confirm as `^KL`/`^KQ`.

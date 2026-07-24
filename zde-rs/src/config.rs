@@ -47,6 +47,8 @@ pub struct Config {
     /// yet wired to any behavior — cursor movement doesn't consult this yet.
     #[allow(dead_code)]
     pub autowrap: bool,
+    /// Show dotfiles in the `^KF` directory picker. ASM `DirSys` (`zde17.asm:153`).
+    pub show_hidden_files: bool,
 }
 
 impl Default for Config {
@@ -67,6 +69,7 @@ impl Default for Config {
             view_columns: 80,
             screen_lines: 24,
             autowrap: true,
+            show_hidden_files: false,
         }
     }
 }

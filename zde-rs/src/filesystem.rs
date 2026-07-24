@@ -110,6 +110,22 @@ pub fn read_file_at_cursor(editor: &mut Editor, path: &Path) -> io::Result<()> {
     Ok(())
 }
 
+/// List regular files in `dir`, sorted by name (`^KF` = `Dir`, `zde17.asm:4663`).
+/// Subdirectories are skipped: CP/M had no subdirectories to browse into, and
+/// this port doesn't add nested navigation (see iteration 1002's scope notes).
+/// Dotfiles are skipped unless `show_hidden` is set, loosely standing in for
+/// the original's `DirSys` flag (`zde17.asm:153`).
+pub fn list_directory(dir: &Path, show_hidden: bool) -> io::Result<Vec<String>> {
+    let mut names: Vec<String> = std::fs::read_dir(dir)?
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| entry.file_type().is_ok_and(|t| t.is_file()))
+        .filter_map(|entry| entry.file_name().into_string().ok())
+        .filter(|name| show_hidden || !name.starts_with('.'))
+        .collect();
+    names.sort();
+    Ok(names)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -193,5 +209,42 @@ mod tests {
     fn save_without_filename_errors() {
         let mut ed = Editor::new(Config::default());
         assert!(save(&mut ed).is_err());
+    }
+
+    /// A unique scratch directory per test (keyed by test name + pid), cleaned
+    /// up on drop so a failed assertion doesn't litter the temp dir.
+    struct TempDir(PathBuf);
+
+    impl TempDir {
+        fn new(name: &str) -> Self {
+            let dir = std::env::temp_dir().join(format!("zde-rs-fs-test-dir-{name}-{}", std::process::id()));
+            std::fs::create_dir_all(&dir).unwrap();
+            TempDir(dir)
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn list_directory_lists_files_sorted_and_skips_subdirs() {
+        let d = TempDir::new("listing");
+        std::fs::write(d.0.join("b.txt"), "").unwrap();
+        std::fs::write(d.0.join("a.txt"), "").unwrap();
+        std::fs::create_dir(d.0.join("subdir")).unwrap();
+        let names = list_directory(&d.0, false).unwrap();
+        assert_eq!(names, vec!["a.txt", "b.txt"]);
+    }
+
+    #[test]
+    fn list_directory_skips_hidden_unless_shown() {
+        let d = TempDir::new("hidden");
+        std::fs::write(d.0.join(".secret"), "").unwrap();
+        std::fs::write(d.0.join("visible.txt"), "").unwrap();
+        assert_eq!(list_directory(&d.0, false).unwrap(), vec!["visible.txt"]);
+        assert_eq!(list_directory(&d.0, true).unwrap(), vec![".secret", "visible.txt"]);
     }
 }
