@@ -1160,6 +1160,19 @@ test "run: ^U undelete restores the last deleted char" {
     try testing.expectEqualStrings("hi", text);
 }
 
+test "inserting inside a marked block shifts its trailing endpoint" {
+    var ed = Editor.init(testing.allocator, .{});
+    defer ed.deinit();
+    ed.buffer.deinit();
+    ed.buffer = try GapBuffer.fromStr(testing.allocator, "abcdef");
+    ed.block.start = 1; // marks "bcde" (offsets 1..5)
+    ed.block.end = 5;
+    ed.buffer.moveTo(3); // inside the marked region
+    _ = try ed.cmdInsert('X');
+    try testing.expectEqual(@as(usize, 1), ed.block.start.?);
+    try testing.expectEqual(@as(usize, 6), ed.block.end.?);
+}
+
 test "run: block mark/copy duplicates the marked text" {
     var ed = Editor.init(testing.allocator, .{});
     defer ed.deinit();
@@ -1193,6 +1206,109 @@ test "run: find moves the cursor to the start of the match" {
     };
     try runScript(&ed, &script);
     try testing.expectEqual(@as(usize, 2), ed.buffer.cursor());
+}
+
+test "cmdInsert in overtype mode replaces the char under the cursor" {
+    var ed = Editor.init(testing.allocator, .{});
+    defer ed.deinit();
+    ed.buffer.deinit();
+    ed.buffer = try GapBuffer.fromStr(testing.allocator, "abc");
+    ed.buffer.moveTo(0);
+    _ = ed.cmdToggleInsert();
+    _ = try ed.cmdInsert('X');
+    const text = try bufferText(&ed);
+    defer testing.allocator.free(text);
+    try testing.expectEqualStrings("Xbc", text);
+}
+
+test "cmdEraseLine then cmdUndelete restores the erased line" {
+    var ed = Editor.init(testing.allocator, .{});
+    defer ed.deinit();
+    ed.buffer.deinit();
+    ed.buffer = try GapBuffer.fromStr(testing.allocator, "ab\ncd");
+    ed.buffer.moveTo(0);
+    _ = try ed.cmdEraseLine();
+    var text = try bufferText(&ed);
+    try testing.expectEqualStrings("cd", text);
+    testing.allocator.free(text);
+
+    _ = try ed.cmdUndelete();
+    text = try bufferText(&ed);
+    defer testing.allocator.free(text);
+    try testing.expectEqualStrings("ab\ncd", text);
+}
+
+test "cmdWordLeft and cmdWordRight land on word boundaries" {
+    var ed = Editor.init(testing.allocator, .{});
+    defer ed.deinit();
+    ed.buffer.deinit();
+    ed.buffer = try GapBuffer.fromStr(testing.allocator, "foo bar");
+    ed.buffer.moveTo(ed.buffer.len());
+    _ = ed.cmdWordLeft();
+    try testing.expectEqual(@as(usize, 4), ed.buffer.cursor());
+    _ = ed.cmdWordLeft();
+    try testing.expectEqual(@as(usize, 0), ed.buffer.cursor());
+    _ = ed.cmdWordRight();
+    try testing.expectEqual(@as(usize, 4), ed.buffer.cursor());
+}
+
+test "cmdUp/cmdDown keep a sticky target column across a short line" {
+    var ed = Editor.init(testing.allocator, .{});
+    defer ed.deinit();
+    ed.buffer.deinit();
+    ed.buffer = try GapBuffer.fromStr(testing.allocator, "ab\nc\nde");
+    ed.buffer.moveTo(2); // end of "ab", column 2
+    ed.target_col = 2;
+    _ = ed.cmdDown();
+    try testing.expectEqual(@as(usize, 4), ed.buffer.cursor()); // clamped to end of "c"
+    _ = ed.cmdDown();
+    try testing.expectEqual(@as(usize, 7), ed.buffer.cursor()); // back to column 2 on "de"
+    _ = ed.cmdUp();
+    try testing.expectEqual(@as(usize, 4), ed.buffer.cursor()); // clamped again on the way back
+}
+
+test "cmdPageForward/cmdPageBackward respect scroll_overlap and clamp at the ends" {
+    var ed = Editor.init(testing.allocator, .{ .screen_lines = 5, .scroll_overlap = 1 });
+    defer ed.deinit();
+    ed.buffer.deinit();
+    ed.buffer = try GapBuffer.fromStr(testing.allocator, "a\na\na\na\na\na");
+    ed.buffer.moveTo(0);
+    _ = ed.cmdPageForward(); // pageSize = 5 - 1 = 4 lines
+    try testing.expectEqual(@as(usize, 8), ed.buffer.cursor());
+    _ = ed.cmdPageBackward(); // only 4 lines precede, so this clamps to the top
+    try testing.expectEqual(@as(usize, 0), ed.buffer.cursor());
+}
+
+test "top/bottom/line-start/line-end/make-top land on the expected offsets" {
+    var ed = Editor.init(testing.allocator, .{});
+    defer ed.deinit();
+    ed.buffer.deinit();
+    ed.buffer = try GapBuffer.fromStr(testing.allocator, "aa\nbbbb\ncc");
+    ed.buffer.moveTo(4); // middle of "bbbb"
+    _ = ed.cmdLineStart();
+    try testing.expectEqual(@as(usize, 3), ed.buffer.cursor());
+    _ = ed.cmdLineEnd();
+    try testing.expectEqual(@as(usize, 7), ed.buffer.cursor());
+    _ = ed.cmdTop();
+    try testing.expectEqual(@as(usize, 0), ed.buffer.cursor());
+    _ = ed.cmdBottom();
+    try testing.expectEqual(@as(usize, 10), ed.buffer.cursor());
+
+    ed.buffer.moveTo(4);
+    _ = ed.cmdMakeTop();
+    try testing.expectEqual(@as(usize, 3), ed.top_offset);
+}
+
+test "cmdScrollDown/cmdScrollUp move top_offset by one line" {
+    var ed = Editor.init(testing.allocator, .{ .screen_lines = 2 });
+    defer ed.deinit();
+    ed.buffer.deinit();
+    ed.buffer = try GapBuffer.fromStr(testing.allocator, "a\nb\nc\nd\ne");
+    ed.buffer.moveTo(0);
+    _ = ed.cmdScrollDown();
+    try testing.expectEqual(@as(usize, 2), ed.top_offset);
+    _ = ed.cmdScrollUp();
+    try testing.expectEqual(@as(usize, 0), ed.top_offset);
 }
 
 test "run: quit without ^K prefix leaves the loop running (unsupported ctrl falls through)" {

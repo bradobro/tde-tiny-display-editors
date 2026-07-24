@@ -1,6 +1,6 @@
 # Epic 1400 — Core editing & cursor movement (Zig)
 
-Status: ready
+Status: done
 
 ## Goal
 
@@ -20,8 +20,8 @@ buffer primitives so the marked block's offsets stay correct.
 
 ## Iterations
 
-- [[doc/iterations/1401-iter-insert-delete-undo]]
-- [[doc/iterations/1402-iter-cursor-movement]]
+- [[doc/iterations/completed/1401-iter-insert-delete-undo]]
+- [[doc/iterations/completed/1402-iter-cursor-movement]]
 
 ## Exit criteria
 
