@@ -10,7 +10,7 @@ edits text yet; this is the foundation every other epic builds on.
 
 ## Scope
 
-- Rust project `zde-rs/` with a clear module tree (**done** in the planning pass;
+- Rust project `rust/` with a clear module tree (**done** in the planning pass;
   builds and `cargo test` passes with stub tests).
 - ADRs for the real decisions: terminal backend, encoding/soft-space, reserved
   keys, feature scope, buffer structure (`[[doc/adr/0001-terminal-backend]]`

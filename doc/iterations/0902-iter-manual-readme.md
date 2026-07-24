@@ -15,10 +15,10 @@ reference and a build/run readme, honest about how the port differs from ZDE 1.7
 
 ## Steps
 
-- `zde-rs/MANUAL.md`: every implemented command grouped by family (main, `^K`,
+- `rust/MANUAL.md`: every implemented command grouped by family (main, `^K`,
   `^Q`, `^O`, ESC), with the key, what it does, and any deviation. Include the
   status-line legend and the ruler.
-- `zde-rs/README.md`: what it is, build/run (`cargo run -- <file>`), the
+- `rust/README.md`: what it is, build/run (`cargo run -- <file>`), the
   hardcoded-config note, and a "Differences from the original" section drawn from
   [[doc/adr/0003-reserved-control-keys]] and [[doc/adr/0004-v1-feature-scope]]
   (dropped printing/PS/hyphenation; deferred macros/directory/windowing; any
@@ -39,7 +39,7 @@ reference and a build/run readme, honest about how the port differs from ZDE 1.7
 
 ## Notes
 
-- `zde-rs/MANUAL.md` and `zde-rs/README.md` written 2026-07-23. Every key
+- `rust/MANUAL.md` and `rust/README.md` written 2026-07-23. Every key
   documented in MANUAL.md was cross-checked by hand against the live match
   arms in `dispatch`/`dispatch_block`/`dispatch_quick`/`dispatch_onscreen`
   (`src/editor.rs`), not by an automated parser — a script that parses
