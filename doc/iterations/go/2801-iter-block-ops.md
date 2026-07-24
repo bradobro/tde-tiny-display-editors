@@ -27,7 +27,7 @@ Wire the `^K` block commands to the already-implemented `block` offset math.
   buffer and correct residual block offsets; `^KW`+`^KR` round-trips a temp file.
 
 ## Depends on
-- [[doc/iterations/go/2500-EPIC-go-file-io]] (for `^KW`/`^KR`),
+- [[doc/iterations/go/x2500-EPIC-go-file-io]] (for `^KW`/`^KR`),
   [[doc/iterations/go/x2400-EPIC-go-core-editing]].
 
 ## References

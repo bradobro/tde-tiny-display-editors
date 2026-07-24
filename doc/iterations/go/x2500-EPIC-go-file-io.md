@@ -1,6 +1,6 @@
 # Epic 2500 — File I/O (Go)
 
-Status: ready
+Status: done
 
 ## Goal
 
@@ -18,7 +18,7 @@ UTF-8 decode/encode boundary between the byte world and the `[]rune` buffer.
 
 ## Iterations
 
-- [[doc/iterations/go/2501-iter-load-save-bak]]
+- [[doc/iterations/go/completed/2501-iter-load-save-bak]]
 
 ## Exit criteria
 

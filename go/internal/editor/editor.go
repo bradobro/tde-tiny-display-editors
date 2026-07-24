@@ -27,6 +27,7 @@ import (
 	"zde/internal/block"
 	"zde/internal/buffer"
 	"zde/internal/config"
+	"zde/internal/filesystem"
 	"zde/internal/help"
 	"zde/internal/keyboard"
 	"zde/internal/screen"
@@ -328,21 +329,26 @@ func (e *Editor) showPrefixHint(menu help.Menu) error {
 }
 
 // dispatchBlock is the ^K block-family table (KMnuSt, zde17.asm:479 / rust
-// dispatch_block, rust/src/editor.rs:355). ^KX (save & exit) and ^KQ (quit,
-// discarding changes) are the two ways out of the editor; ^KB/^KK/^KU mark
-// the block's start/end and unmark it (this epic's minimal slice of block
-// support, just enough for AdjustInsert/AdjustDelete to have something to
-// track in tests — see markBlockStart/markBlockEnd below). ^KX does not yet
-// write the file (that's epic 2500's filesystem package); it just quits.
-// Copy/move/erase/read/write/load/save land with block ops and file I/O in
-// epics 2500/2800.
+// dispatch_block, rust/src/editor.rs:355). ^KS/^KX/^KD/^KN are the file I/O
+// commands (epic 2500, ported from rust cmd_save/cmd_save_exit/cmd_save_new/
+// cmd_change_name); ^KQ quits, confirming first if the buffer is modified
+// (rust cmd_quit). ^KB/^KK/^KU mark the block's start/end and unmark it
+// (epic 2400's minimal slice of block support — see markBlockStart/
+// markBlockEnd below). Copy/move/erase/read/write-block land with block ops
+// in epic 2800.
 func (e *Editor) dispatchBlock(key keyboard.Key) (bool, error) {
 	if key.Kind == keyboard.KCtrl {
 		switch key.R {
-		case 'X': // TODO(epic 2500): write the file before quitting (ASM SavExt).
-			return true, nil
+		case 'S':
+			return e.cmdSave()
+		case 'X':
+			return e.cmdSaveExit()
+		case 'D':
+			return e.cmdSaveNew()
+		case 'N':
+			return e.cmdChangeName()
 		case 'Q':
-			return true, nil
+			return e.cmdQuit()
 		case 'B':
 			e.markBlockStart()
 			return false, nil
@@ -356,6 +362,182 @@ func (e *Editor) dispatchBlock(key keyboard.Key) (bool, error) {
 	}
 	e.message = "block command: not yet implemented"
 	return false, nil
+}
+
+// saveCurrent writes the buffer to e.filename, sets e.message to the result
+// either way, and reports whether it succeeded (ASM Save, zde17.asm:4905 /
+// rust save_current, rust/src/editor.rs:1027) — callers that chain a save
+// (^KX, ^KD) use the bool to decide whether to continue. Simplification
+// shared with Rust: rather than prompting inline for a name (as the ASM
+// does), a save with no filename yet just asks the user to ^K N first.
+func (e *Editor) saveCurrent() bool {
+	if e.filename == "" {
+		e.message = "no filename set (use ^K N first)"
+		return false
+	}
+	text := []rune(e.buf.String())
+	if err := filesystem.WriteFile(e.filename, text, e.cfg.MakeBackups); err != nil {
+		e.message = "save failed: " + err.Error()
+		return false
+	}
+	e.modified = false
+	e.message = "saved"
+	return true
+}
+
+// cmdSave is ^KS = Save (ASM Save, zde17.asm:4905 / rust cmd_save,
+// rust/src/editor.rs:1044).
+func (e *Editor) cmdSave() (bool, error) {
+	e.saveCurrent()
+	return false, nil
+}
+
+// cmdSaveExit is ^KX = Exit (ASM SavExt, zde17.asm:708 / rust cmd_save_exit,
+// rust/src/editor.rs:1052): save, then quit — but only if the save actually
+// succeeded, matching the ASM's `RET NZ` (don't quit on a failed save) so a
+// write error doesn't also cost the user the in-memory buffer.
+func (e *Editor) cmdSaveExit() (bool, error) {
+	return e.saveCurrent(), nil
+}
+
+// cmdChangeName is ^KN = ChgNam (ASM ChgNam, zde17.asm:5011 / rust
+// cmd_change_name, rust/src/editor.rs:1062): retarget the filename without
+// saving. Esc at the prompt leaves the filename untouched.
+func (e *Editor) cmdChangeName() (bool, error) {
+	name, ok, err := e.promptLine("Name: ")
+	if err != nil {
+		return false, err
+	}
+	if ok {
+		e.filename = name
+	}
+	return false, nil
+}
+
+// cmdSaveNew is ^KD = Done (ASM Done, zde17.asm:714, which hands off to
+// Restrt the same as Load / rust cmd_save_new, rust/src/editor.rs:1090):
+// save the current document, then start a fresh empty buffer under a new
+// name so the user keeps editing. Only prompts for the new name once the
+// save has actually succeeded — a failed save leaves the current buffer
+// (and its unsaved changes) untouched rather than discarding them.
+func (e *Editor) cmdSaveNew() (bool, error) {
+	if !e.saveCurrent() {
+		return false, nil
+	}
+	name, ok, err := e.promptLine("New file: ")
+	if err != nil {
+		return false, err
+	}
+	if ok {
+		e.resetToNewBuffer(name)
+	}
+	return false, nil
+}
+
+// resetToNewBuffer starts a fresh, empty, unmarked document under name —
+// the same fields rust/src/filesystem.rs's load_into resets (buffer,
+// filename, modified, block mark), plus this port's own undo slot and
+// vertical-motion target column, which have no Rust equivalent to mirror
+// but are just as stale against a brand-new buffer.
+func (e *Editor) resetToNewBuffer(name string) {
+	e.buf = buffer.FromString("")
+	e.filename = name
+	e.modified = false
+	e.blk = block.Block{}
+	e.undo = undo{}
+	e.targetCol = nil
+}
+
+// cmdQuit is ^KQ = Quit (ASM Quit, zde17.asm:720 / rust cmd_quit,
+// rust/src/editor.rs:1103): quit without saving, confirming first if there
+// are unsaved changes so a stray ^K Q doesn't silently throw away work.
+func (e *Editor) cmdQuit() (bool, error) {
+	if e.modified {
+		ok, err := e.confirm("Abandon changes? (Y/N):")
+		if err != nil {
+			return false, err
+		}
+		if !ok {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// promptLine reads a line of text at the message row, echoing as the user
+// types (ASM NewNam/Prompt, zde17.asm:5022/6954 / rust read_line,
+// rust/src/editor.rs:880). Enter accepts (ok=true); Esc cancels (ok=false,
+// whatever was typed so far is discarded); Backspace/Del edit the line in
+// progress. Built on []rune rather than strings.Builder so Backspace can pop
+// one whole rune at a time even for multibyte input.
+func (e *Editor) promptLine(prompt string) (string, bool, error) {
+	var buf []rune
+	for {
+		if err := e.writePromptLine(prompt + string(buf)); err != nil {
+			return "", false, err
+		}
+		key, err := e.keys.NextKey()
+		if err != nil {
+			return "", false, err
+		}
+		switch key.Kind {
+		case keyboard.KChar:
+			if key.R == '\r' {
+				return string(buf), true, nil
+			}
+			buf = append(buf, key.R)
+		case keyboard.KEsc:
+			return "", false, nil
+		case keyboard.KBackspace, keyboard.KDel:
+			if len(buf) > 0 {
+				buf = buf[:len(buf)-1]
+			}
+		}
+	}
+}
+
+// confirm asks a Y/N question at the message row, looping until a clear Y
+// or N; Esc counts as "no" (ASM Confrm, zde17.asm:911 / rust confirm,
+// rust/src/editor.rs:903).
+func (e *Editor) confirm(prompt string) (bool, error) {
+	if err := e.writePromptLine(prompt); err != nil {
+		return false, err
+	}
+	for {
+		key, err := e.keys.NextKey()
+		if err != nil {
+			return false, err
+		}
+		if key.Kind == keyboard.KEsc {
+			return false, nil
+		}
+		if key.Kind != keyboard.KChar {
+			continue
+		}
+		switch unicode.ToUpper(key.R) {
+		case 'Y':
+			return true, nil
+		case 'N':
+			return false, nil
+		}
+	}
+}
+
+// writePromptLine writes s to the message row and flushes immediately — the
+// plumbing shared by promptLine and confirm, both of which have to make what
+// they just wrote visible right away since execution blocks on the very next
+// key (same reasoning as showPrefixHint above).
+func (e *Editor) writePromptLine(s string) error {
+	if err := e.scr.MoveTo(e.messageRow(), 0); err != nil {
+		return err
+	}
+	if err := e.scr.ClearLine(); err != nil {
+		return err
+	}
+	if err := e.scr.WriteString(s); err != nil {
+		return err
+	}
+	return e.scr.Flush()
 }
 
 // markBlockStart is ^KB (ASM Block, zde17.asm:4420 / rust cmd_mark_block_start,

@@ -1,6 +1,8 @@
 package editor
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -67,11 +69,13 @@ func TestRunTypesThenQuitsViaCtrlKX(t *testing.T) {
 // TestRunEscThenCtrlQQuits proves ESC is a working synonym for the ^K prefix
 // (dispatch's KEsc arm routes to dispatchBlock, ASM's CKSyn default), and
 // that dispatchPrefix's blocking NextKey call after showPrefixHint correctly
-// hands the *next* key to the block-family handler.
+// hands the *next* key to the block-family handler. Typing 'x' leaves the
+// buffer modified, so (since epic 2500) ^K Q now confirms before quitting —
+// the trailing 'y' accepts that prompt.
 func TestRunEscThenCtrlQQuits(t *testing.T) {
 	scr := screen.NewFakeScreen(24, 80)
 	keys := keyboard.NewScriptedKeys(
-		charKey('x'), key(keyboard.Key{Kind: keyboard.KEsc}), ctrlKey('Q'),
+		charKey('x'), key(keyboard.Key{Kind: keyboard.KEsc}), ctrlKey('Q'), charKey('y'),
 	)
 	e := New(config.DefaultConfig(), scr, keys, "", "")
 
@@ -492,4 +496,321 @@ func TestQuickDocumentTopAndBottom(t *testing.T) {
 	if e2.buf.Cursor() != 0 {
 		t.Errorf("after ^QR, cursor = %d, want 0 (start of document)", e2.buf.Cursor())
 	}
+}
+
+// --- promptLine / confirm (epic 2500's status-line read-line mechanism) ---
+
+// TestPromptLineEchoesAndAcceptsOnEnter drives promptLine directly (bypassing
+// dispatch) with typed chars, a Backspace, and a trailing Enter, checking
+// both the returned string and that the in-progress line was actually
+// echoed to the message row (ASM NewNam/Prompt, zde17.asm:5022/6954 / rust
+// read_line, rust/src/editor.rs:880) rather than only accumulated silently.
+func TestPromptLineEchoesAndAcceptsOnEnter(t *testing.T) {
+	scr := screen.NewFakeScreen(24, 80)
+	keys := keyboard.NewScriptedKeys(
+		charKey('a'), charKey('b'),
+		key(keyboard.Key{Kind: keyboard.KBackspace}), // removes 'b'
+		charKey('c'), charKey('\r'),
+	)
+	e := New(config.DefaultConfig(), scr, keys, "", "")
+
+	got, ok, err := e.promptLine("Name: ")
+	if err != nil {
+		t.Fatalf("promptLine err = %v", err)
+	}
+	if !ok {
+		t.Fatal("ok = false, want true (accepted via Enter)")
+	}
+	if got != "ac" {
+		t.Errorf("promptLine = %q, want %q", got, "ac")
+	}
+	if !strings.Contains(scr.Text(), "Name: ac") {
+		t.Errorf("writes = %v, want one containing %q", scr.Writes, "Name: ac")
+	}
+}
+
+// TestPromptLineEscCancels checks Esc returns ok=false and discards whatever
+// had been typed so far, rather than returning the partial line.
+func TestPromptLineEscCancels(t *testing.T) {
+	scr := screen.NewFakeScreen(24, 80)
+	keys := keyboard.NewScriptedKeys(charKey('a'), charKey('b'), key(keyboard.Key{Kind: keyboard.KEsc}))
+	e := New(config.DefaultConfig(), scr, keys, "", "")
+
+	got, ok, err := e.promptLine("Name: ")
+	if err != nil {
+		t.Fatalf("promptLine err = %v", err)
+	}
+	if ok {
+		t.Error("ok = true, want false (Esc cancels)")
+	}
+	if got != "" {
+		t.Errorf("promptLine = %q, want empty on cancel", got)
+	}
+}
+
+// TestConfirmYAndNAndEsc checks confirm's three outcomes (ASM Confrm,
+// zde17.asm:911 / rust confirm, rust/src/editor.rs:903): 'y' -> true, 'n' ->
+// false, Esc -> false, and a stray key in between is ignored rather than
+// ending the loop.
+func TestConfirmYAndNAndEsc(t *testing.T) {
+	cases := []struct {
+		name string
+		keys []keyboard.Key
+		want bool
+	}{
+		{"y", []keyboard.Key{charKey('y')}, true},
+		{"uppercase Y", []keyboard.Key{charKey('Y')}, true},
+		{"n", []keyboard.Key{charKey('n')}, false},
+		{"esc", []keyboard.Key{key(keyboard.Key{Kind: keyboard.KEsc})}, false},
+		{"stray key then y", []keyboard.Key{charKey('q'), charKey('y')}, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			scr := screen.NewFakeScreen(24, 80)
+			e := New(config.DefaultConfig(), scr, keyboard.NewScriptedKeys(c.keys...), "", "")
+			got, err := e.confirm("Abandon changes? (Y/N):")
+			if err != nil {
+				t.Fatalf("confirm err = %v", err)
+			}
+			if got != c.want {
+				t.Errorf("confirm = %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
+// --- ^KS / ^KX / ^KD / ^KQ / ^KN (epic 2500 file I/O command wiring) ---
+
+// TestCtrlKSSavesToFilenameAndClearsModified drives ^K S through Run against
+// a real temp-dir file, checking both the on-disk content and that
+// e.modified/e.message reflect a successful save, matching rust cmd_save
+// (rust/src/editor.rs:1044).
+func TestCtrlKSSavesToFilenameAndClearsModified(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "doc.txt")
+	scr := screen.NewFakeScreen(24, 80)
+	keys := keyboard.NewScriptedKeys(charKey('h'), charKey('i'), ctrlKey('K'), ctrlKey('S'))
+	e := New(config.DefaultConfig(), scr, keys, path, "")
+
+	if err := e.Run(); err != nil {
+		t.Fatalf("Run err = %v", err)
+	}
+	if e.modified {
+		t.Error("modified = true, want false after ^K S")
+	}
+	if e.message != "saved" {
+		t.Errorf("message = %q, want %q", e.message, "saved")
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read saved file err = %v", err)
+	}
+	if string(got) != "hi" {
+		t.Errorf("saved content = %q, want %q", string(got), "hi")
+	}
+}
+
+// TestCtrlKSWithNoFilenameSetLeavesMessageAndKeepsGoing checks the
+// no-filename-yet path (rust save_current's simplification: ask for ^K N
+// rather than prompting inline) doesn't quit and sets an explanatory
+// message. Calls dispatchBlock directly (rather than through Run) because
+// Run's own loop clears e.message before reading the *next* key, so a check
+// made after Run returns would see whatever the last-read key cleared it to,
+// not what ^K S itself set.
+func TestCtrlKSWithNoFilenameSetLeavesMessageAndKeepsGoing(t *testing.T) {
+	scr := screen.NewFakeScreen(24, 80)
+	e := New(config.DefaultConfig(), scr, keyboard.NewScriptedKeys(), "", "")
+
+	quit, err := e.dispatchBlock(ctrlKey('S'))
+	if err != nil {
+		t.Fatalf("dispatchBlock err = %v", err)
+	}
+	if quit {
+		t.Error("quit = true, want false (a failed save must not quit)")
+	}
+	if !strings.Contains(e.message, "no filename set") {
+		t.Errorf("message = %q, want it to mention no filename set", e.message)
+	}
+}
+
+// TestCtrlKXSavesThenQuits checks ^K X (save+exit) both writes the file and
+// terminates Run (ASM SavExt, zde17.asm:708 / rust cmd_save_exit,
+// rust/src/editor.rs:1052).
+func TestCtrlKXSavesThenQuits(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "doc.txt")
+	scr := screen.NewFakeScreen(24, 80)
+	keys := keyboard.NewScriptedKeys(charKey('h'), charKey('i'), ctrlKey('K'), ctrlKey('X'))
+	e := New(config.DefaultConfig(), scr, keys, path, "")
+
+	if err := e.Run(); err != nil {
+		t.Fatalf("Run err = %v", err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read saved file err = %v", err)
+	}
+	if string(got) != "hi" {
+		t.Errorf("saved content = %q, want %q", string(got), "hi")
+	}
+}
+
+// TestCtrlKXWithNoFilenameDoesNotQuit checks the ASM's `RET NZ` behavior
+// (rust cmd_save_exit): a failed save (no filename set) must NOT quit —
+// the buffer would otherwise be lost with no way to save it. The trailing
+// ^K Q ('h' having typed leaves the buffer modified, so it needs the final
+// 'y') proves the loop kept going after the failed ^K X and reached a real
+// quit afterward.
+func TestCtrlKXWithNoFilenameDoesNotQuit(t *testing.T) {
+	scr := screen.NewFakeScreen(24, 80)
+	keys := keyboard.NewScriptedKeys(charKey('h'), ctrlKey('K'), ctrlKey('X'), ctrlKey('K'), ctrlKey('Q'), charKey('y'))
+	e := New(config.DefaultConfig(), scr, keys, "", "")
+
+	if err := e.Run(); err != nil {
+		t.Fatalf("Run err = %v", err)
+	}
+	if got := e.buf.String(); got != "h" {
+		t.Errorf("buffer = %q, want %q (nothing lost by the failed save)", got, "h")
+	}
+}
+
+// TestCtrlKNChangesFilenameWithoutSaving drives ^K N to rename the target,
+// typing a new name and Enter, then checks the filename changed but nothing
+// was written to disk (ASM ChgNam, zde17.asm:5011 / rust cmd_change_name,
+// rust/src/editor.rs:1062) — unlike ^K S/^K X/^K D, ^K N never saves.
+func TestCtrlKNChangesFilenameWithoutSaving(t *testing.T) {
+	dir := t.TempDir()
+	newPath := filepath.Join(dir, "renamed.txt")
+	scr := screen.NewFakeScreen(24, 80)
+
+	script := []keyboard.Key{ctrlKey('K'), ctrlKey('N')}
+	script = append(script, runeKeys(newPath)...)
+	script = append(script, charKey('\r'), ctrlKey('K'), ctrlKey('Q'))
+	e := New(config.DefaultConfig(), scr, keyboard.NewScriptedKeys(script...), "old.txt", "")
+
+	if err := e.Run(); err != nil {
+		t.Fatalf("Run err = %v", err)
+	}
+	if e.filename != newPath {
+		t.Errorf("filename = %q, want %q", e.filename, newPath)
+	}
+	if _, err := os.Stat(newPath); !os.IsNotExist(err) {
+		t.Errorf("%s exists (err = %v), want ^K N to not save", newPath, err)
+	}
+}
+
+// TestCtrlKNEscLeavesFilenameUnchanged checks Esc at the ^K N prompt cancels
+// without touching e.filename.
+func TestCtrlKNEscLeavesFilenameUnchanged(t *testing.T) {
+	scr := screen.NewFakeScreen(24, 80)
+	keys := keyboard.NewScriptedKeys(
+		ctrlKey('K'), ctrlKey('N'),
+		charKey('x'), key(keyboard.Key{Kind: keyboard.KEsc}),
+		ctrlKey('K'), ctrlKey('Q'),
+	)
+	e := New(config.DefaultConfig(), scr, keys, "original.txt", "")
+
+	if err := e.Run(); err != nil {
+		t.Fatalf("Run err = %v", err)
+	}
+	if e.filename != "original.txt" {
+		t.Errorf("filename = %q, want unchanged %q", e.filename, "original.txt")
+	}
+}
+
+// TestCtrlKQQuitsImmediatelyWhenNotModified checks an unmodified buffer
+// quits on ^K Q with no confirmation prompt at all (rust cmd_quit,
+// rust/src/editor.rs:1103). Calling dispatchBlock directly (rather than
+// through Run, where "quit" and "the script ran out" both make Run return
+// nil) lets the test tell the two apart: the script here carries no y/n
+// key, so if a confirm were wrongly triggered it would surface as an
+// io.EOF error from dispatchBlock instead of a clean quit=true.
+func TestCtrlKQQuitsImmediatelyWhenNotModified(t *testing.T) {
+	scr := screen.NewFakeScreen(24, 80)
+	e := New(config.DefaultConfig(), scr, keyboard.NewScriptedKeys(), "", "")
+
+	quit, err := e.dispatchBlock(ctrlKey('Q'))
+	if err != nil {
+		t.Fatalf("dispatchBlock err = %v", err)
+	}
+	if !quit {
+		t.Error("quit = false, want true (unmodified buffer needs no confirmation)")
+	}
+}
+
+// TestCtrlKQModifiedDeclineDoesNotQuitThenAcceptQuits drives the full
+// confirm loop through dispatchBlock directly: declining ('n') must not
+// quit, and a second attempt accepting ('y') must.
+func TestCtrlKQModifiedDeclineDoesNotQuitThenAcceptQuits(t *testing.T) {
+	scr := screen.NewFakeScreen(24, 80)
+	keys := keyboard.NewScriptedKeys(charKey('n'), charKey('y'))
+	e := New(config.DefaultConfig(), scr, keys, "", "")
+	e.modified = true
+
+	quit, err := e.dispatchBlock(ctrlKey('Q'))
+	if err != nil {
+		t.Fatalf("dispatchBlock err = %v", err)
+	}
+	if quit {
+		t.Error("quit = true after declining, want false")
+	}
+	if e.buf.String() != "" || !e.modified {
+		t.Error("declining a quit must not touch the buffer or the modified flag")
+	}
+
+	quit, err = e.dispatchBlock(ctrlKey('Q'))
+	if err != nil {
+		t.Fatalf("dispatchBlock err = %v", err)
+	}
+	if !quit {
+		t.Error("quit = false after accepting, want true")
+	}
+}
+
+// TestCtrlKDSavesThenStartsFreshNamedBuffer drives ^K D end to end: it
+// should save the current document to its old path, then reset the buffer
+// (empty, unmarked, unmodified) under whatever new name was typed (ASM Done,
+// zde17.asm:714 / rust cmd_save_new, rust/src/editor.rs:1090).
+func TestCtrlKDSavesThenStartsFreshNamedBuffer(t *testing.T) {
+	dir := t.TempDir()
+	oldPath := filepath.Join(dir, "old.txt")
+	newPath := filepath.Join(dir, "new.txt")
+
+	scr := screen.NewFakeScreen(24, 80)
+	script := []keyboard.Key{charKey('h'), charKey('i'), ctrlKey('K'), ctrlKey('D')}
+	script = append(script, runeKeys(newPath)...)
+	script = append(script, charKey('\r'), ctrlKey('K'), ctrlKey('Q'))
+	e := New(config.DefaultConfig(), scr, keyboard.NewScriptedKeys(script...), oldPath, "")
+
+	if err := e.Run(); err != nil {
+		t.Fatalf("Run err = %v", err)
+	}
+
+	old, err := os.ReadFile(oldPath)
+	if err != nil {
+		t.Fatalf("read old file err = %v", err)
+	}
+	if string(old) != "hi" {
+		t.Errorf("old file content = %q, want %q", string(old), "hi")
+	}
+	if e.filename != newPath {
+		t.Errorf("filename = %q, want %q", e.filename, newPath)
+	}
+	if !e.buf.IsEmpty() {
+		t.Errorf("buffer = %q, want empty after ^K D's reset", e.buf.String())
+	}
+	if e.modified {
+		t.Error("modified = true, want false for the fresh buffer")
+	}
+	if e.blk.Start != nil || e.blk.End != nil {
+		t.Error("block mark survived ^K D's reset, want cleared")
+	}
+}
+
+// runeKeys turns a string into a slice of KChar keys, for feeding a
+// filename into promptLine-driven commands one rune at a time.
+func runeKeys(s string) []keyboard.Key {
+	keys := make([]keyboard.Key, 0, len(s))
+	for _, r := range s {
+		keys = append(keys, charKey(r))
+	}
+	return keys
 }

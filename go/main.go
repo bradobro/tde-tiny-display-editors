@@ -16,6 +16,7 @@ import (
 
 	"zde/internal/config"
 	"zde/internal/editor"
+	"zde/internal/filesystem"
 	"zde/internal/keyboard"
 	"zde/internal/screen"
 )
@@ -25,7 +26,11 @@ func main() {
 	if len(os.Args) > 1 {
 		filename = os.Args[1]
 	}
-	text := readInitialText(filename)
+	text, err := readInitialText(filename)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "zde:", err)
+		os.Exit(1)
+	}
 
 	cfg := config.DefaultConfig()
 	scr := screen.NewTermScreen()
@@ -39,18 +44,24 @@ func main() {
 	}
 }
 
-// readInitialText loads a named file's starting content, or "" for a new
-// document / an unreadable path (the ASM behavior for a nonexistent filename
-// argument: start editing a new, empty file rather than erroring out).
-func readInitialText(filename string) string {
+// readInitialText loads a named file's starting content through
+// filesystem.ReadFile (epic 2500), so argv's "open this file, or start a new
+// buffer under this name if it doesn't exist yet" behavior (ASM
+// Restrt/Edit, zde17.asm:326-345) is exercised by the same code path the
+// editor's own commands use, not a separate raw os.ReadFile. A missing file
+// is not an error — filesystem.ReadFile already returns ("", false, nil) for
+// that — but a genuine read error (permissions, a directory given as the
+// argument, ...) is: unlike the old silent-swallow behavior, that now
+// propagates so main can report it and exit rather than starting blank.
+func readInitialText(filename string) (string, error) {
 	if filename == "" {
-		return ""
+		return "", nil
 	}
-	b, err := os.ReadFile(filename)
+	runes, _, err := filesystem.ReadFile(filename)
 	if err != nil {
-		return ""
+		return "", err
 	}
-	return string(b)
+	return string(runes), nil
 }
 
 // restoreOnPanic is main's panic-recovery layer (ADR 0003 §B, ADR 0008 §5):
