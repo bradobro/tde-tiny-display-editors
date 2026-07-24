@@ -1,25 +1,9 @@
-# ZDE 1.6 (Z-System Display Editor) reconstituted source
-
-Using the source code of [VDE
-2.67](http://www.classiccmp.org/cpmarchives/cpm/Software/WalnutCD/enterprs/cpm/utils/s/vde267sc.lbr)
-as a guide, I've reconstituted the source code for [ZDE 1.6](http://www.classiccmp.org/cpmarchives/cpm/Software/WalnutCD/cpm/editor/zde16.lbr).
-
-The source has been assembled with:
-
-* Al Hawley's ZMAC: assemble as is.
-* MicroSoft's M80: rename to ZDE16.MAC, un-comment the first two lines
-  and assemble. Use RELHEX to create ZDE16.HEX.
-* ZASM (Cromemco's ASMB): Rename to ZDE16.Z80 and assemble. Use RELHEX
-to create ZDE16.HEX.
-
-Use MLOAD to create ZDE16.COM.
-
-There are still a couple of routines new to ZDE that I haven't figured
-out (yet). But most of them have been sussed out.
-
-## ZDE 1.7
-
-I've fixed the "doesn't preserve timestamps for files larger than a
-single extent under ZSDOS" bug that was present in v1.6. The existing
-ZDENST16.COM program will work with the 1.7 to set the program up for
-your terminal and printer.
+total 72
+-rw-r--r--@ 1 bradobro  staff   369B Jul 24 07:51 CHANGELOG.md
+-rw-r--r--@ 1 bradobro  staff   2.9K Jul 24 07:57 CLAUDE.md
+-rw-r--r--@ 1 bradobro  staff   976B Jul 24 08:00 cog.toml
+drwxr-xr-x@ 5 bradobro  staff   160B Jul 24 08:01 doc
+-rw-r--r--@ 1 bradobro  staff   3.5K Jul 24 07:57 PROPOSED-CLAUDE.md
+-rw-r--r--@ 1 bradobro  staff     0B Jul 24 08:02 README.md
+drwxr-xr-x@ 8 bradobro  staff   256B Jul 24 07:57 zde-rs
+-rw-r--r--@ 1 bradobro  staff    17K Jul 24 07:48 zde17.com
