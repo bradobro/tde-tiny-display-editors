@@ -14,15 +14,6 @@ skip_ci = "[skip ci]"
 skip_untracked = true
 tag_prefix = "v"
 
-pre_bump_hooks = [
-   "[ \"$(git rev-parse --show-toplevel)\" = \"$PWD\" ] || { echo 'ERROR: cog bump must be run from project root'; exit 1; }",
-  "echo 'export const VERSION = \"{{version}}\";' > version.ts",
-  "echo '{{version}}' > version.txt",
-  "echo 'package main\n\nconst VERSION = \"{{version}}\"\n' > version.go",
-  "git add ./version.ts version.txt version.go",
-  "git commit -m 'chore: update version files'",
-]
-
 [git_hooks.commit-msg]
 script = """#!/bin/sh
 set -e
