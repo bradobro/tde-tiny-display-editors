@@ -32,9 +32,9 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const alloc = gpa.allocator();
 
-    // TODO(epic 0500): argv filename -> load into the buffer (ASM `Edit`/`LoadIt`,
+    // TODO(epic 1500): argv filename -> load into the buffer (ASM `Edit`/`LoadIt`,
     //   `zde17.asm:334`,`6212`); no arg starts a blank, unnamed buffer.
-    // TODO(epic 0300): install the panic handler (terminal restore), build the
+    // TODO(epic 1300): install the panic handler (terminal restore), build the
     //   TermScreen + TermKeys backend, and run the editor loop with `defer`
     //   terminal restore (ADR 0003 / ADR 0007).
     var ed = editor.Editor.init(alloc, config.Config{});
@@ -43,7 +43,7 @@ pub fn main() !void {
     // `std.debug.print` handles stderr for us — fine for this scaffolding
     // notice. Real frames are built in an ArrayList and written in one syscall
     // by the terminal backend (see screen.zig), not through this path.
-    std.debug.print("zde (zig port): scaffolding only — editor loop lands in epic 0300.\n", .{});
+    std.debug.print("zde (zig port): scaffolding only — editor loop lands in epic 1300.\n", .{});
 }
 
 test {

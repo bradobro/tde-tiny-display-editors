@@ -7,7 +7,7 @@
 //! code (`^A`..`^Z`, ESC) — the WordStar/VDE control-key scheme.
 //!
 //! Crossterm did the escape-sequence parsing for the Rust port; here we own it
-//! (`TermKeys`, fleshed out in iteration 0303). This module defines the
+//! (`TermKeys`, fleshed out in iteration 1303). This module defines the
 //! normalized `Key` set, the `KeySource` runtime interface (vtable, mirroring
 //! Rust's `dyn KeySource`), the pure byte classifier used by both the real and
 //! fake sources, and a `ScriptedKeys` fake for tests.
@@ -62,7 +62,7 @@ pub const KeySource = struct {
 /// is *not* an escape sequence lead. Returns `null` for `0x1b` (ESC) and for
 /// bytes `>= 0x80` (UTF-8 lead/continuation), which the caller must handle with
 /// look-ahead — this keeps the pure, unit-testable core separate from the fd
-/// reads and the ESC timeout that live only in `TermKeys` (iteration 0303).
+/// reads and the ESC timeout that live only in `TermKeys` (iteration 1303).
 ///
 /// Mirrors the mapping crossterm applied for the Rust port: Enter/`\r` and Tab
 /// become `char`, control letters become `ctrl(uppercase)`.

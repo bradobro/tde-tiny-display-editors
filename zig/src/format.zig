@@ -2,14 +2,14 @@
 //! paragraph reflow (`^B`). Corresponds to the ASM formatter (`zde17.asm:5214`).
 //!
 //! Pure column/word math over `[]const u21`, unit-testable without a terminal.
-//! Fleshed out in epic 0600 (iterations 0601/0602); this is the M0 scaffold.
+//! Fleshed out in epic 1600 (iterations 1601/1602); this is the M0 scaffold.
 //! Ported from `rust/src/format.rs`.
 
 const std = @import("std");
 
 /// Next variable tab stop strictly past `col`, from a 0-terminated stop list
 /// (ASM `VTList`, `zde17.asm:162`). Returns `null` if none is beyond `col`, so
-/// the caller can fall back to a hard-tab stop. Placeholder core for iter 0601.
+/// the caller can fall back to a hard-tab stop. Placeholder core for iter 1601.
 pub fn nextVariableTabStop(stops: []const u8, col: usize) ?usize {
     for (stops) |s| {
         if (s == 0) break; // 0 terminates the list

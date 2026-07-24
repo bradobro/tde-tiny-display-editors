@@ -6,8 +6,8 @@ the third implementation in the repo, beside the Rust port (`../rust/`) and a
 planned Go port. See `../doc/MANUAL.md` for the command reference (shared across
 the ports).
 
-**Status:** scaffolding + text engine (epics 0100–0200). The interactive editor
-loop lands in epic 0300. See `../doc/iterations/zig/all.md` for the plan.
+**Status:** scaffolding + text engine (epics 1100–1200). The interactive editor
+loop lands in epic 1300. See `../doc/iterations/all.md` for the plan.
 
 ## Build & run
 
@@ -16,7 +16,7 @@ Requires Zig **0.16.0**. Zero external dependencies.
 ```sh
 zig build              # compile
 zig build test         # run all unit tests
-zig build run -- FILE  # run the editor on FILE (once epic 0300 lands)
+zig build run -- FILE  # run the editor on FILE (once epic 1300 lands)
 ```
 
 ## How this port differs from the Rust one

@@ -241,7 +241,7 @@ pub const GapBuffer = struct {
 
     /// 0-based display column of `offset` within its line, expanding hard tabs
     /// to `tab_width`-wide stops (analog of the column update, `zde17.asm:5378`;
-    /// variable tab stops are `format`'s job, iteration 0601).
+    /// variable tab stops are `format`'s job, iteration 1601).
     pub fn columnOf(self: Self, offset: usize, tab_width: usize) usize {
         const start = self.lineStart(offset);
         var col: usize = 0;

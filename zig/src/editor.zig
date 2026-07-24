@@ -26,7 +26,7 @@ const KeySource = @import("keyboard.zig").KeySource;
 pub const InsertMode = enum { insert, overtype };
 
 /// Single-slot undelete state (`^U`), the ASM's one-level undo. Filled in with
-/// the `char`/`span` variants when editing lands (iteration 0401).
+/// the `char`/`span` variants when editing lands (iteration 1401).
 pub const Undo = union(enum) {
     none,
     char: struct { pos: usize, c: u21 },
@@ -69,13 +69,13 @@ pub const Editor = struct {
         }
     }
 
-    /// The main loop. Wired up in epic 0300 (iteration 0303); for now it is a
+    /// The main loop. Wired up in epic 1300 (iteration 1303); for now it is a
     /// placeholder so the module compiles and `main` can reference it.
     pub fn run(self: *Self, screen: Screen, keys: KeySource) !void {
         _ = self;
         _ = screen;
         _ = keys;
-        // TODO(iter 0303): Ready loop — redraw (with visible cursor) then
+        // TODO(iter 1303): Ready loop — redraw (with visible cursor) then
         //   dispatch one key, until a quit/exit command returns.
     }
 };

@@ -5,7 +5,7 @@
 //! stops (`Ruler`, `^OT`). Whether help is a full menu or a single hint line is
 //! governed by `Config.help_menus` (ASM `Help`, `zde17.asm:156`).
 //!
-//! Fleshed out in epic 0900 (iteration 0901); this is the M0 scaffold. Ported
+//! Fleshed out in epic 1900 (iteration 1901); this is the M0 scaffold. Ported
 //! from `rust/src/help.rs`.
 
 const std = @import("std");
@@ -20,7 +20,7 @@ pub const Menu = enum {
 };
 
 /// A single-line hint shown while `Config.help_menus` is off (ASM `HlpMsg`
-/// area, `zde17.asm:7992`). Full menu text arrives in iteration 0901.
+/// area, `zde17.asm:7992`). Full menu text arrives in iteration 1901.
 pub fn hint(menu: Menu) []const u8 {
     return switch (menu) {
         .main => "^K block  ^Q quick  ^O onscreen  ^U undel  ^V ins  ESC prefix",

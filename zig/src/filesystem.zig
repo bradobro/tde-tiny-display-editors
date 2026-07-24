@@ -4,7 +4,7 @@
 //!
 //! This is the UTF-8 boundary: on load we decode file bytes into the buffer's
 //! `[]u21`; on save we encode back. No other module reasons about UTF-8 byte
-//! boundaries (ADR 0005). Fleshed out in epic 0500 (iteration 0501); this is the
+//! boundaries (ADR 0005). Fleshed out in epic 1500 (iteration 1501); this is the
 //! M0 scaffold. Ported from `rust/src/filesystem.rs`.
 
 const std = @import("std");
@@ -15,7 +15,7 @@ const Allocator = std.mem.Allocator;
 /// native Unix filesystems.
 pub const bak_suffix = ".bak";
 
-// TODO(iter 0501): readFile -> ?[]u21 (null = new file), writeFile (rename to
+// TODO(iter 1501): readFile -> ?[]u21 (null = new file), writeFile (rename to
 //   `.bak` first when make_backups), loadInto, save, writeBlock,
 //   readFileAtCursor, listDirectory (files only, sorted, hidden toggle).
 
