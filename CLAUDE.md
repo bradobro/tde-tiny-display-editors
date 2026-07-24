@@ -1,5 +1,7 @@
 # ZDE
 
+Use the iteration skill for planning if it is available.
+
 Rust port of VDE, a historic DOS/CP-M text editor, via a reconstituted Z80
 source (ZDE). Goal: a minimal editor — the original VDE `.com` was ~17k.
 Currently ~662k as of epic 9: not minimal, but handles ANSI terminals
