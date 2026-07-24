@@ -10,11 +10,11 @@ All notable changes to this project will be documented in this file. See [conven
 - epic-0700-search - (7d730ba) - Brad Olson
 - epic-0600-formatting - (ed69317) - Brad Olson
 - epic-0500-file-io - (3ec944c) - Brad Olson
+- epic-0400-core-editing - (bee7976) - Brad Olson
+- epics-0100-0300: planning, gap buffer text engine, screen render, main loop dispatch
 #### Documentation
-- manual and readme (i0902) - (43234a4) - Brad Olson
+- Rust-based manual and readme (i0902) - (43234a4) - Brad Olson
 - notes about rust size - (9440aa4) - Brad Olson
-#### Miscellaneous Chores
-- move rust directory - (ef6f86c) - Brad Olson
 
 - - -
 
