@@ -32,7 +32,7 @@ reflows on demand instead.
 - Line/column math matches hand-computed values on a fixture with tabs.
 
 ## Depends on
-- [[doc/iterations/0201-iter-gap-buffer-core]].
+- [[doc/iterations/completed/0201-iter-gap-buffer-core]].
 
 ## References
 - `zde17.asm:1964`/`2001` (CR scans), `2224` (abs line number), `5378` (column

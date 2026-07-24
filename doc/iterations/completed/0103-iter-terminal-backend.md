@@ -38,7 +38,7 @@ every exit path.
   (and a forced `panic!`) both restore the terminal.
 
 ## Depends on
-- [[doc/iterations/0102-choice-resolve-adrs]] (ADRs 0001, 0003).
+- [[doc/iterations/completed/0102-choice-resolve-adrs]] (ADRs 0001, 0003).
 
 ## References
 - `zde17.asm:924` (`AdjKey`), `7039` (`GoTo`), `739` (clear on quit).

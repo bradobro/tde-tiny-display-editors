@@ -21,8 +21,8 @@ stops, and center/flush lines — plus the auto-indent and double-space toggles.
 
 ## Iterations
 
-- [[doc/iterations/0601-iter-tabs-margins-columns]]
-- [[doc/iterations/0602-iter-wordwrap-reform-center]]
+- [[doc/iterations/completed/0601-iter-tabs-margins-columns]]
+- [[doc/iterations/completed/0602-iter-wordwrap-reform-center]]
 
 ## Exit criteria
 

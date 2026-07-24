@@ -38,7 +38,7 @@ restored.
   the live prompt).
 
 ## Depends on
-- [[doc/iterations/0201-iter-gap-buffer-core]], [[doc/iterations/0303-iter-main-loop-dispatch]].
+- [[doc/iterations/completed/0201-iter-gap-buffer-core]], [[doc/iterations/completed/0303-iter-main-loop-dispatch]].
 
 ## References
 - `zde17.asm:334` (`Edit`), `4840`/`4903`/`6212`/`6332` (load/write), `5009`

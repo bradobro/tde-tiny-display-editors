@@ -32,7 +32,7 @@ The character-level editing commands, driven through the dispatch from epic 0300
   what was removed.
 
 ## Depends on
-- [[doc/iterations/0303-iter-main-loop-dispatch]], [[doc/iterations/0201-iter-gap-buffer-core]].
+- [[doc/iterations/completed/0303-iter-main-loop-dispatch]], [[doc/iterations/completed/0201-iter-gap-buffer-core]].
 
 ## References
 - `zde17.asm:4042`/`4117`/`4177`/`4203`/`4249`/`4281`/`4287`/`4340`, word delete

@@ -33,7 +33,7 @@ line/column queries.
   tab columns).
 
 ## Depends on
-- [[doc/iterations/0303-iter-main-loop-dispatch]], [[doc/iterations/0202-iter-line-column-queries]].
+- [[doc/iterations/completed/0303-iter-main-loop-dispatch]], [[doc/iterations/completed/0202-iter-line-column-queries]].
 
 ## References
 - `zde17.asm:2759`/`2770`/`2812`/`2937`/`2955`/`3014`/`3057`/`3110`/`3216`/`3238`/

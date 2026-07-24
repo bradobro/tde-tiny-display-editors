@@ -30,7 +30,7 @@ information layout.
   string formatting, no terminal).
 
 ## Depends on
-- [[doc/iterations/0301-iter-render-text-area]].
+- [[doc/iterations/completed/0301-iter-render-text-area]].
 
 ## References
 - `zde17.asm:7832` (layout), `6624` (`ShowFil`), `7992`+ (menu/ruler area).

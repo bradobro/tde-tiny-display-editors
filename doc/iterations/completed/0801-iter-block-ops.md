@@ -67,7 +67,7 @@ region.
   previously-marked offsets meaningless.
 
 ## Depends on
-- [[doc/iterations/0401-iter-insert-delete-undo]], [[doc/iterations/0501-iter-load-save-bak]].
+- [[doc/iterations/completed/0401-iter-insert-delete-undo]], [[doc/iterations/completed/0501-iter-load-save-bak]].
 
 ## References
 - `zde17.asm:4420`-`4959` (mark/erase/copy/move/read/write); `^K` table `479`.

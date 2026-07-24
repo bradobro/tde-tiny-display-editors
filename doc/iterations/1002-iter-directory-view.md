@@ -26,7 +26,7 @@ Port the `^KF` directory browser: list files and pick one to load.
   load of the right path (test the selection→path mapping, not the live UI).
 
 ## Depends on
-- [[doc/iterations/0501-iter-load-save-bak]], [[doc/iterations/0303-iter-main-loop-dispatch]].
+- [[doc/iterations/completed/0501-iter-load-save-bak]], [[doc/iterations/completed/0303-iter-main-loop-dispatch]].
 
 ## References
 - `zde17.asm:4663` (`Dir`); `^KF` table entry `489`; `DirSys` `153`.

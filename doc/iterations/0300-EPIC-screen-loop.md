@@ -22,9 +22,9 @@ renders. Real editing behavior arrives in epic 0400.
 
 ## Iterations
 
-- [[doc/iterations/0301-iter-render-text-area]]
-- [[doc/iterations/0302-iter-status-and-ruler]]
-- [[doc/iterations/0303-iter-main-loop-dispatch]]
+- [[doc/iterations/completed/0301-iter-render-text-area]]
+- [[doc/iterations/completed/0302-iter-status-and-ruler]]
+- [[doc/iterations/completed/0303-iter-main-loop-dispatch]]
 
 ## Exit criteria
 

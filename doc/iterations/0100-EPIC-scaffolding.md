@@ -22,16 +22,16 @@ edits text yet; this is the foundation every other epic builds on.
 
 ## Iterations
 
-- [[doc/iterations/0101-spike-asm-architecture]]
-- [[doc/iterations/0102-choice-resolve-adrs]]
-- [[doc/iterations/0103-iter-terminal-backend]]
+- [[doc/iterations/completed/0101-spike-asm-architecture]]
+- [[doc/iterations/completed/0102-choice-resolve-adrs]]
+- [[doc/iterations/completed/0103-iter-terminal-backend]]
 
 ## Exit criteria
 
 - ✅ ADRs 0001-0005 are Accepted (or explicitly deferred).
 - ✅ Running `zde-rs` enters full-screen raw mode, echoes normalized keystrokes, and
   restores the terminal cleanly on quit and on a forced panic. Implemented over
-  `crossterm` (see `[[doc/iterations/0103-iter-terminal-backend]]`); `main.rs`
+  `crossterm` (see `[[doc/iterations/completed/0103-iter-terminal-backend]]`); `main.rs`
   currently runs a temporary echo/quit demo loop that iteration 0303 replaces
   with the real `Ready:` loop.
 

@@ -57,7 +57,7 @@ toggles that the status line reflects.
   4-slot `VTList` — an earlier iteration's choice, not one revisited here.
 
 ## Depends on
-- [[doc/iterations/0303-iter-main-loop-dispatch]], [[doc/iterations/0601-iter-tabs-margins-columns]].
+- [[doc/iterations/completed/0303-iter-main-loop-dispatch]], [[doc/iterations/completed/0601-iter-tabs-margins-columns]].
 
 ## References
 - `zde17.asm:7992` (`DoMnu`), `5118`-`5213` (toggles), header refs `126`-`129`.

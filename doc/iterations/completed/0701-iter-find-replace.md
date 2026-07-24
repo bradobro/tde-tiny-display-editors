@@ -58,7 +58,7 @@ Implement find, replace, and repeat with the original's options.
   match to the end of the buffer in one go.
 
 ## Depends on
-- [[doc/iterations/0202-iter-line-column-queries]], [[doc/iterations/0303-iter-main-loop-dispatch]].
+- [[doc/iterations/completed/0202-iter-line-column-queries]], [[doc/iterations/completed/0303-iter-main-loop-dispatch]].
 
 ## References
 - `zde17.asm:3351`-`3855` (find/replace/repeat); flags `7882`/`7883`.

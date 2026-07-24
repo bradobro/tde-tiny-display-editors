@@ -21,41 +21,6 @@ Legend: ✅ done · ⬜ not done. Trailing parentheticals are color, not status.
 
 ## Current epic iterations
 
-### 0100 — Scaffolding & Decisions
-- ✅ [[doc/iterations/0101-spike-asm-architecture]] — map the ASM design
-- ✅ [[doc/iterations/0102-choice-resolve-adrs]] — resolve ADR 0001-0005 with Brad
-- ✅ [[doc/iterations/0103-iter-terminal-backend]] — Screen/KeySource impl + raw mode + safe restore
-
-### 0200 — Text Engine
-- ✅ [[doc/iterations/0201-iter-gap-buffer-core]] — insert/delete/move/grow
-- ✅ [[doc/iterations/0202-iter-line-column-queries]] — CR scan, line/col queries
-
-### 0300 — Screen & Main Loop
-- ✅ [[doc/iterations/0301-iter-render-text-area]] — draw visible text (tabs, hard CR)
-- ✅ [[doc/iterations/0302-iter-status-and-ruler]] — header/status line + ruler
-- ✅ [[doc/iterations/0303-iter-main-loop-dispatch]] — Ready: loop + Case dispatch + prefix menus
-
-### 0400 — Core Editing
-- ✅ [[doc/iterations/0401-iter-insert-delete-undo]] — insert/overtype/delete/backspace/undelete
-- ✅ [[doc/iterations/0402-iter-cursor-movement]] — char/word/line/page/screen, top/bottom, line erase
-
-### 0500 — File I/O
-- ✅ [[doc/iterations/0501-iter-load-save-bak]] — argv filename, load, save, BAK, change-name, quit/exit/done
-
-### 0600 — Formatting
-- ✅ [[doc/iterations/0601-iter-tabs-margins-columns]] — column tracking, hard/variable tabs, margins
-- ✅ [[doc/iterations/0602-iter-wordwrap-reform-center]] — word wrap, paragraph reform, center/flush
-
-### 0700 — Search & Replace
-- ✅ [[doc/iterations/0701-iter-find-replace]] — find/replace forward/back/global/repeat, case-insensitive
-
-### 0800 — Block Operations
-- ✅ [[doc/iterations/0801-iter-block-ops]] — mark/copy/move/erase/read/write
-
-### 0900 — Help, Toggles & Docs
-- ✅ [[doc/iterations/0901-iter-help-ruler-toggles]] — help menus, ruler, mode toggles
-- ✅ [[doc/iterations/0902-iter-manual-readme]] — MANUAL.md + README.md
-
 ### 1000 — Advanced / Deferred
 - ✅ [[doc/iterations/1001-spike-macros]] — macro system feasibility spike: partial go (record/replay small effort; language statements no-go); follow-up `iter-macro-record-replay` proposed, not yet created
 - ✅ [[doc/iterations/1002-iter-directory-view]] — `^KF` directory view, shipped

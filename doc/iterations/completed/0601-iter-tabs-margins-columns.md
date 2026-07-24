@@ -45,7 +45,7 @@ and variable tab stops, and left/right margin handling.
   field tests can flip directly in the meantime.
 
 ## Depends on
-- [[doc/iterations/0202-iter-line-column-queries]], [[doc/iterations/0401-iter-insert-delete-undo]].
+- [[doc/iterations/completed/0202-iter-line-column-queries]], [[doc/iterations/completed/0401-iter-insert-delete-undo]].
 
 ## References
 - `zde17.asm:5273`/`5303`/`5378`, tabs `3856`, config `161`-`164`.

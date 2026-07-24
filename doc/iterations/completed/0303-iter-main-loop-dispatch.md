@@ -37,7 +37,7 @@ screen refreshes.
   loop. Individual command behavior is tested in epics 0400+.
 
 ## Depends on
-- [[doc/iterations/0301-iter-render-text-area]], [[doc/iterations/0302-iter-status-and-ruler]].
+- [[doc/iterations/completed/0301-iter-render-text-area]], [[doc/iterations/completed/0302-iter-status-and-ruler]].
 
 ## References
 - `zde17.asm:379` (`Ready:`), `1826` (`Case`), `403`/`479`/`577`/`632`/`538`

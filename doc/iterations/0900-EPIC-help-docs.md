@@ -19,8 +19,8 @@ the project asked for: `MANUAL.md` and `README.md`.
 
 ## Iterations
 
-- [[doc/iterations/0901-iter-help-ruler-toggles]]
-- [[doc/iterations/0902-iter-manual-readme]]
+- [[doc/iterations/completed/0901-iter-help-ruler-toggles]]
+- [[doc/iterations/completed/0902-iter-manual-readme]]
 
 ## Exit criteria
 

@@ -16,7 +16,7 @@ or read a file in at the cursor.
 
 ## Iterations
 
-- [[doc/iterations/0801-iter-block-ops]]
+- [[doc/iterations/completed/0801-iter-block-ops]]
 
 ## Exit criteria
 

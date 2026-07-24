@@ -31,7 +31,7 @@ expansion and optional hard-CR glyphs.
   fixtures with tabs and long (scrolled) lines.
 
 ## Depends on
-- [[doc/iterations/0103-iter-terminal-backend]], [[doc/iterations/0202-iter-line-column-queries]].
+- [[doc/iterations/completed/0103-iter-terminal-backend]], [[doc/iterations/completed/0202-iter-line-column-queries]].
 
 ## References
 - Show routines `zde17.asm:7158`-`7639`; horizontal scroll `3318`/`7741`.

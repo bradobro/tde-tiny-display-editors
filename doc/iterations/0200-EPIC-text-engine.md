@@ -22,8 +22,8 @@ the most directly portable part of the original.
 
 ## Iterations
 
-- [[doc/iterations/0201-iter-gap-buffer-core]]
-- [[doc/iterations/0202-iter-line-column-queries]]
+- [[doc/iterations/completed/0201-iter-gap-buffer-core]]
+- [[doc/iterations/completed/0202-iter-line-column-queries]]
 
 ## Exit criteria
 

@@ -20,7 +20,7 @@ rename the edit target, and quit through the original's save/exit flows.
 
 ## Iterations
 
-- [[doc/iterations/0501-iter-load-save-bak]]
+- [[doc/iterations/completed/0501-iter-load-save-bak]]
 
 ## Exit criteria
 

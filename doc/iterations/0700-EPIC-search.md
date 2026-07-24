@@ -17,7 +17,7 @@ repeat-last (`^L`), and case-insensitive matching.
 
 ## Iterations
 
-- [[doc/iterations/0701-iter-find-replace]]
+- [[doc/iterations/completed/0701-iter-find-replace]]
 
 ## Exit criteria
 

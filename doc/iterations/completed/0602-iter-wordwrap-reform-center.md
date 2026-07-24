@@ -52,7 +52,7 @@ margin, reflow a paragraph to the margins, and center/flush a line.
   confirmed idempotent by re-running reform on already-reformatted text.
 
 ## Depends on
-- [[doc/iterations/0601-iter-tabs-margins-columns]].
+- [[doc/iterations/completed/0601-iter-tabs-margins-columns]].
 
 ## References
 - `zde17.asm:5336`/`5419`/`5477`/`5691`. `2129` (`Cmprs`, soft-space

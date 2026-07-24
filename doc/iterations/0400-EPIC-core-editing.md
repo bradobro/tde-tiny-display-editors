@@ -19,8 +19,8 @@ original can.
 
 ## Iterations
 
-- [[doc/iterations/0401-iter-insert-delete-undo]]
-- [[doc/iterations/0402-iter-cursor-movement]]
+- [[doc/iterations/completed/0401-iter-insert-delete-undo]]
+- [[doc/iterations/completed/0402-iter-cursor-movement]]
 
 ## Exit criteria
 
