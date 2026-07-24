@@ -1,10 +1,18 @@
 # Re-Experiencing Visual Display Editor (VDE)
 
+**Origins**: I originally forked from [mecparts/zde](https://github.com/mecparts/zde) to retain history of the initial CP/M assembly, I've disconnected the fork because this repo has very different intentions and should never be merged. **Big Thanks!** to Eric Meyer for creating and sharing VDE and to mecparts for his reconstructive work.)
+
+# Ah VDE!
+
+Beware: software sentimentality ahead.
+
 It was 1987, sophomore year in college, and Turbo Pascal hit the magazine pages and the software shelf of our computer center. Suddenly there was something worth stepping away from the Vax terminal and Apple II to check out some of the mysterious IBM PC's over on the other side of the center.
 
 Besides finding a whole new playground for building software, I discovered a new experience of full-screen editing with WordStar-style keyboard maps. I fell in love with a text editor for the first time.
 
 Shortly after graduation, I bought my first IBM PC. It was about that time Eric Meyer's freeware, *Visual Display Editor* (VDE) showed up and I suddenly had that joy for all my documents. Before long, it edited my personal knowledgebase and writing.
+
+# A Portable and Unicode-Aware Port
 
 Since then I've moved through Windows and now work mostly in Posix-based systems (including my MacBook). My affections have passed through several other editors, and my fingers know Vim keystrokes better than the WordStar mapping. But I still remember the elegant fun of VDE--so much power crammed into such a small executable!
 
