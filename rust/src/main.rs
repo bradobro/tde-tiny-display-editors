@@ -1,7 +1,7 @@
 //! ZDE-rs — a Rust port of ZDE 1.7 (Z-System Display Editor), itself a
 //! descendant of Eric Meyer's VDE, a WordStar-like full-screen text editor.
 //!
-//! The original is Z80 assembly for CP/M (see `../zde17.asm`). This port targets
+//! The original is Z80 assembly for CP/M (see `../../doc/research/zde/zde17.asm`). This port targets
 //! a modern terminal on macOS/Unix. The goal (see project `CLAUDE.md`) is a small,
 //! faithful clone: same command set and feel, but portable and testable.
 //!

@@ -1,11 +1,11 @@
 # zde-rs
 
 A Rust port of ZDE/VDE, a WordStar-style DOS text editor from the early
-1990s. The original was Z80 assembly (`../zde17.asm`) targeting CP/M-style
+1990s. The original was Z80 assembly (`../doc/research/zde/zde17.asm`) targeting CP/M-style
 8-bit machines; this port asks how small and faithful a modern clone can be
 while running on a real ANSI terminal with UTF-8 text.
 
-See `MANUAL.md` for the full command reference, `doc/iterations/` for the
+See `doc/MANUAL.md` for the full command reference, `doc/iterations/` for the
 build plan and progress, and `doc/adr/` for the design decisions summarized
 below.
 
