@@ -1,6 +1,6 @@
 # Epic 1300 — Screen rendering & main loop (Zig)
 
-Status: ready
+Status: done
 
 ## Goal
 
@@ -24,9 +24,9 @@ improvement over the Rust version.
 
 ## Iterations
 
-- [[doc/iterations/1301-iter-term-backend-render]]
-- [[doc/iterations/1302-iter-status-and-ruler]]
-- [[doc/iterations/1303-iter-main-loop-dispatch]]
+- [[doc/iterations/completed/1301-iter-term-backend-render]]
+- [[doc/iterations/completed/1302-iter-status-and-ruler]]
+- [[doc/iterations/completed/1303-iter-main-loop-dispatch]]
 
 ## Exit criteria
 

@@ -26,6 +26,18 @@
 const std = @import("std");
 const config = @import("config.zig");
 const editor = @import("editor.zig");
+const screen_mod = @import("screen.zig");
+const keyboard = @import("keyboard.zig");
+
+/// A panic unwinds straight past `defer screen.leave()`, so this is the only
+/// chance to leave the alternate screen and restore `termios` before the
+/// process exits with the panic message (ADR 0003: terminal restoration on
+/// every exit, panics included).
+fn panicHandler(msg: []const u8, ret_addr: ?usize) noreturn {
+    screen_mod.panicRestore();
+    std.debug.defaultPanic(msg, ret_addr);
+}
+pub const panic = std.debug.FullPanic(panicHandler);
 
 pub fn main() !void {
     var gpa: std.heap.DebugAllocator(.{}) = .init;
@@ -34,16 +46,19 @@ pub fn main() !void {
 
     // TODO(epic 1500): argv filename -> load into the buffer (ASM `Edit`/`LoadIt`,
     //   `zde17.asm:334`,`6212`); no arg starts a blank, unnamed buffer.
-    // TODO(epic 1300): install the panic handler (terminal restore), build the
-    //   TermScreen + TermKeys backend, and run the editor loop with `defer`
-    //   terminal restore (ADR 0003 / ADR 0007).
     var ed = editor.Editor.init(alloc, config.Config{});
     defer ed.deinit();
 
-    // `std.debug.print` handles stderr for us — fine for this scaffolding
-    // notice. Real frames are built in an ArrayList and written in one syscall
-    // by the terminal backend (see screen.zig), not through this path.
-    std.debug.print("zde (zig port): scaffolding only — editor loop lands in epic 1300.\n", .{});
+    var term_screen = screen_mod.TermScreen.init(alloc);
+    defer term_screen.deinit();
+    const screen = term_screen.screen();
+    try screen.enter();
+    defer screen.leave() catch {};
+
+    var term_keys = keyboard.TermKeys{};
+    const keys = term_keys.source();
+
+    try ed.run(screen, keys);
 }
 
 test {

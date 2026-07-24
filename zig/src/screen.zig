@@ -90,6 +90,20 @@ pub const Screen = struct {
 /// access to the `TermScreen` instance itself.
 pub var saved_termios: ?std.posix.termios = null;
 
+/// Best-effort terminal restore for the panic handler (`main.zig`, iteration
+/// 1303): a panic unwinds straight past `defer screen.leave()`, so this is
+/// the only chance to leave the alternate screen, show the cursor, and
+/// restore `termios` before the process actually exits. Errors are swallowed
+/// deliberately — the panic message is what matters at this point, and a
+/// panic handler that itself fails to restore the tty shouldn't also fail to
+/// print the panic.
+pub fn panicRestore() void {
+    TermScreen.writeRaw("\x1b[?25h\x1b[0 q\x1b[?1049l") catch {};
+    if (saved_termios) |t| {
+        std.posix.tcsetattr(TermScreen.stdin_fd, .FLUSH, t) catch {};
+    }
+}
+
 /// The zero-dependency ANSI backend (ADR 0007): raw `termios` via
 /// `std.posix`, raw ANSI escape codes for everything else. Escape codes and
 /// text are appended to `out` by every method except `flush`, which is the
@@ -102,7 +116,7 @@ pub const TermScreen = struct {
 
     const Self = @This();
     const stdout_fd = std.posix.STDOUT_FILENO;
-    const stdin_fd = std.posix.STDIN_FILENO;
+    pub const stdin_fd = std.posix.STDIN_FILENO;
 
     pub fn init(alloc: Allocator) Self {
         return .{ .alloc = alloc };
@@ -113,8 +127,11 @@ pub const TermScreen = struct {
     }
 
     /// The one place this module calls a write syscall. Loops because `write`
-    /// may accept fewer bytes than requested (POSIX allows short writes).
-    fn writeRaw(bytes: []const u8) Error!void {
+    /// may accept fewer bytes than requested (POSIX allows short writes). `pub`
+    /// so the panic handler (`panicRestore`, iteration 1303) can use it too —
+    /// a panic unwinds past any live `TermScreen` instance, so it needs a way
+    /// to emit the restore sequence without one.
+    pub fn writeRaw(bytes: []const u8) Error!void {
         var written: usize = 0;
         while (written < bytes.len) {
             const n = std.c.write(stdout_fd, bytes.ptr + written, bytes.len - written);
@@ -291,6 +308,50 @@ pub fn renderTextArea(
     }
 }
 
+/// The fields the status/header line reports: filename, cursor position,
+/// mode, and the toggles that only show a letter when on. Analog of
+/// `HeaderInfo` (`rust/src/screen.rs:237`).
+pub const HeaderInfo = struct {
+    filename: ?[]const u8 = null,
+    page: usize = 1,
+    line: usize = 1,
+    col: usize = 1,
+    insert: bool = true,
+    modified: bool = false,
+    auto_indent: bool = false,
+    double_space: bool = false,
+    variable_tabs: bool = false,
+    show_hard_cr: bool = false,
+};
+
+/// Format the status/header line: `DOC:FILENAME.TXT*  Pg 1  Ln 1  Cl 51  INS
+/// AI DS`, matching the original's layout comment (`zde17.asm:7832`) and
+/// `ShowFil` (`zde17.asm:6624`). Toggle letters only appear when their mode is
+/// on. Analog of `render_header` (`rust/src/screen.rs:253`).
+pub fn renderHeader(out: *std.ArrayList(u8), alloc: Allocator, info: HeaderInfo) Error!void {
+    try out.appendSlice(alloc, info.filename orelse "UNTITLED");
+    if (info.modified) try out.append(alloc, '*');
+    try out.print(alloc, "  Pg {d}  Ln {d}  Cl {d}  {s}", .{
+        info.page,
+        info.line,
+        info.col,
+        if (info.insert) "INS" else "OVR",
+    });
+
+    const Toggle = struct { on: bool, letters: []const u8 };
+    const toggles = [_]Toggle{
+        .{ .on = info.auto_indent, .letters = "AI" },
+        .{ .on = info.double_space, .letters = "DS" },
+        .{ .on = info.variable_tabs, .letters = "VT" },
+        .{ .on = info.show_hard_cr, .letters = "HCR" },
+    };
+    for (toggles) |t| {
+        if (!t.on) continue;
+        try out.append(alloc, ' ');
+        try out.appendSlice(alloc, t.letters);
+    }
+}
+
 /// A test `Screen` that records everything written, so editor command flows can
 /// be asserted without a terminal (mirrors the Rust `FakeScreen`). Grows a
 /// single `ArrayList(u8)` of all `writeStr` output; `showCursor`/`moveTo` update
@@ -417,4 +478,33 @@ test "renderTextArea clips to view columns and honors hscroll" {
     defer out.deinit(testing.allocator);
     try renderTextArea(&out, testing.allocator, &b, 0, 2, testCfg(1, 5), false);
     try testing.expectEqualStrings("cdefg", out.items);
+}
+
+// renderHeader: ported from rust/src/screen.rs's `header()` test helper and
+// its three tests.
+
+fn testHeader(alloc: Allocator, info: HeaderInfo) ![]u8 {
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(alloc);
+    try renderHeader(&out, alloc, info);
+    return out.toOwnedSlice(alloc);
+}
+
+test "renderHeader shows filename position and mode" {
+    const s = try testHeader(testing.allocator, .{ .filename = "FILE.TXT" });
+    defer testing.allocator.free(s);
+    try testing.expectEqualStrings("FILE.TXT  Pg 1  Ln 1  Cl 1  INS", s);
+}
+
+test "renderHeader marks modified and overtype" {
+    const s = try testHeader(testing.allocator, .{ .filename = "FILE.TXT", .modified = true, .insert = false });
+    defer testing.allocator.free(s);
+    try testing.expect(std.mem.startsWith(u8, s, "FILE.TXT*"));
+    try testing.expect(std.mem.indexOf(u8, s, "OVR") != null);
+}
+
+test "renderHeader appends active toggles" {
+    const s = try testHeader(testing.allocator, .{ .filename = "FILE.TXT", .auto_indent = true, .show_hard_cr = true });
+    defer testing.allocator.free(s);
+    try testing.expect(std.mem.endsWith(u8, s, "AI HCR"));
 }

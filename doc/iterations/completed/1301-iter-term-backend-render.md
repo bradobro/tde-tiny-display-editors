@@ -1,12 +1,12 @@
 # 1301 — Terminal backend & text-area render
 
 Epic: [[doc/iterations/1300-EPIC-zig-screen-loop]]
-Status: in progress
+Status: done
 
 ## Progress
-- ⬜ design
-- ⬜ implement
-- ⬜ test
+- ✅ design
+- ✅ implement
+- ✅ test
 
 ## Goal
 
@@ -42,3 +42,28 @@ so a frame can be built in memory and written in one syscall.
 ## References
 - `rust/src/screen.rs` (`render_text_area`, `expand_tabs`). ASM screen writes
   `zde17.asm:6909`,`7039`.
+
+## Implementation notes
+
+- Confirmed `std.posix` on 0.16 has `tcgetattr`/`tcsetattr` and the darwin
+  termios flag structs are ergonomic packed structs with named bool fields
+  (`.IXON`, `.OPOST`, `.ECHO`, etc.) — no raw bitmasks needed there.
+- Confirmed `std.posix` has **no `write`** in 0.16 (moved into the new
+  `std.Io` file API) and `TIOCGWINSZ` is nowhere in the standard library.
+  `std.Io.File`/`std.Io.Threaded` is an async-capable abstraction (thread
+  pool, futures) — the wrong tool for a handful of synchronous tty writes.
+  The standard library's own low-level terminal helpers (`std.debug.print`,
+  `lockStderr`) explicitly bypass `Io` for this reason, calling it "the most
+  basic syscalls available." Followed that precedent: `std.c.write`/
+  `std.c.ioctl` for the actual syscalls, `@cImport("sys/ioctl.h")` only for
+  the missing `TIOCGWINSZ` constant — matching ADR 0007's anticipated
+  fallback exactly, nothing invented beyond it.
+- `renderTextArea` returns one `ArrayList(u8)` framebuffer with rows joined by
+  `'\n'` rather than Rust's `Vec<String>`, since a rendered row's text can
+  never itself contain a raw `'\n'` (it stops at the line's terminating CR);
+  the redraw loop (iteration 1303) will split on `'\n'` to drive `moveTo`/
+  `clearLine`/`writeStr` per row.
+- All four `render_text_area` tests ported verbatim from `rust/src/screen.rs`
+  (tab expansion, hard-CR glyph, hscroll/view_columns clipping, padding past
+  end of document). `TermScreen` itself is untested (manual-smoke seam, as
+  planned) — `zig build test` passes 40/40.
