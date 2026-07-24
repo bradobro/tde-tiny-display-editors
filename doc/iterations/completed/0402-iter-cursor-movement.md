@@ -1,6 +1,6 @@
 # 0402 — Cursor movement
 
-Epic: [[doc/iterations/0400-EPIC-core-editing]]
+Epic: [[doc/iterations/x0400-EPIC-rust-core-editing]]
 Status: done
 
 ## Progress

@@ -1,6 +1,6 @@
 # 1002 — Directory view (`^KF`)
 
-Epic: [[doc/iterations/1000-EPIC-advanced-deferred]]
+Epic: [[doc/iterations/1000-EPIC-rust-advanced-deferred]]
 Status: done
 
 ## Progress

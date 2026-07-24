@@ -1,6 +1,6 @@
 # 0102 — Choice: resolve the architecture ADRs
 
-Epic: [[doc/iterations/0100-EPIC-scaffolding]]
+Epic: [[doc/iterations/x0100-EPIC-rust-scaffolding]]
 Status: done
 
 ## Progress

@@ -1,6 +1,6 @@
 # 0801 — Block operations
 
-Epic: [[doc/iterations/0800-EPIC-block-ops]]
+Epic: [[doc/iterations/x0800-EPIC-rust-block-ops]]
 Status: done
 
 ## Progress

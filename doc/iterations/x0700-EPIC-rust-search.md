@@ -30,5 +30,5 @@ repeat-last (`^L`), and case-insensitive matching.
 - Find/replace: `zde17.asm:3351` (section), `3353` (`Find`), `3737` (global
   replace), `3776` (repeat).
 - Option flags: `zde17.asm:7882` (`FBackw`), `7883` (`FGlobl`), `7881` (`ChgFlg`).
-- Depends on epic `[[doc/iterations/0200-EPIC-text-engine]]`, ADR
+- Depends on epic `[[doc/iterations/x0200-EPIC-rust-text-engine]]`, ADR
   `[[doc/adr/0002-text-encoding-soft-space]]`.

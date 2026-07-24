@@ -1,6 +1,6 @@
 # 0701 — Find & replace
 
-Epic: [[doc/iterations/0700-EPIC-search]]
+Epic: [[doc/iterations/x0700-EPIC-rust-search]]
 Status: done
 
 ## Progress

@@ -1,6 +1,6 @@
 # 0602 — Word wrap, reformat & center
 
-Epic: [[doc/iterations/0600-EPIC-formatting]]
+Epic: [[doc/iterations/x0600-EPIC-rust-formatting]]
 Status: done
 
 ## Progress

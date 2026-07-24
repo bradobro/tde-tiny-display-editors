@@ -39,5 +39,5 @@ renders. Real editing behavior arrives in epic 0400.
   (`Prefix`).
 - Status line layout: `zde17.asm:7832` (comment), `6624` (`ShowFil`).
 - Show routines: `zde17.asm:7158`-`7639`.
-- Depends on epic `[[doc/iterations/0200-EPIC-text-engine]]`, ADR
+- Depends on epic `[[doc/iterations/x0200-EPIC-rust-text-engine]]`, ADR
   `[[doc/adr/0001-terminal-backend]]`.

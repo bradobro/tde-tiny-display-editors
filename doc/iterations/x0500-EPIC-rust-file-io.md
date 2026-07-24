@@ -32,5 +32,5 @@ rename the edit target, and quit through the original's save/exit flows.
 - Load/save: `zde17.asm:4840` (`Load`), `4903` (write file), `6212` (read file),
   `6332` (write chars), `5009` (`ChgNam`).
 - Quit flows: `zde17.asm:706` (`Exit`/`Done`/`Quit`), `366` (BAK flag setup).
-- Depends on epic `[[doc/iterations/0200-EPIC-text-engine]]`, ADR
+- Depends on epic `[[doc/iterations/x0200-EPIC-rust-text-engine]]`, ADR
   `[[doc/adr/0002-text-encoding-soft-space]]`.

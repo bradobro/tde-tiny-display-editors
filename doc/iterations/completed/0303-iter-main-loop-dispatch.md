@@ -1,6 +1,6 @@
 # 0303 — Main loop & command dispatch
 
-Epic: [[doc/iterations/0300-EPIC-screen-loop]]
+Epic: [[doc/iterations/x0300-EPIC-rust-screen-loop]]
 Status: done
 
 ## Progress

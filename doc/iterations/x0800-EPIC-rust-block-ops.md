@@ -28,5 +28,5 @@ or read a file in at the cursor.
 - Block section: `zde17.asm:4420` (mark), `4561` (erase), `4606` (copy), `4652`
   (move), `4663` (dir — see epic 1000), `4871` (read file), `4943` (write block).
 - `^K` table: `zde17.asm:479` (`KMnuSt`).
-- Depends on epics `[[doc/iterations/0200-EPIC-text-engine]]`,
-  `[[doc/iterations/0500-EPIC-file-io]]`.
+- Depends on epics `[[doc/iterations/x0200-EPIC-rust-text-engine]]`,
+  `[[doc/iterations/x0500-EPIC-rust-file-io]]`.

@@ -1,6 +1,6 @@
 # 0901 — Help menus, ruler & toggles
 
-Epic: [[doc/iterations/0900-EPIC-help-docs]]
+Epic: [[doc/iterations/x0900-EPIC-rust-help-docs]]
 Status: done
 
 ## Progress

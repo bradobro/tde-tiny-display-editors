@@ -36,5 +36,5 @@ original can.
 - Movement: `zde17.asm:2759` (`Top`), `2770` (`Bottom`), `2812` (quick moves),
   `2937`/`2955` (up/down), `3014`/`3057` (left/right), `3110` (word),
   `3216`/`3238` (page), `3260`/`3318` (scroll).
-- Depends on epics `[[doc/iterations/0200-EPIC-text-engine]]`,
-  `[[doc/iterations/0300-EPIC-screen-loop]]`.
+- Depends on epics `[[doc/iterations/x0200-EPIC-rust-text-engine]]`,
+  `[[doc/iterations/x0300-EPIC-rust-screen-loop]]`.

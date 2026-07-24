@@ -8,16 +8,16 @@ Legend: ✅ done · ⬜ not done. Trailing parentheticals are color, not status.
 
 ## Epics
 
-- ✅ [[doc/iterations/0100-EPIC-scaffolding]] — project skeleton, ADRs, terminal backend
-- ✅ [[doc/iterations/0200-EPIC-text-engine]] — the gap-buffer text engine
-- ✅ [[doc/iterations/0300-EPIC-screen-loop]] — screen rendering, status line, main loop + dispatch
-- ✅ [[doc/iterations/0400-EPIC-core-editing]] — insert/delete/undo + cursor movement
-- ✅ [[doc/iterations/0500-EPIC-file-io]] — load/save/BAK/change-name/quit
-- ✅ [[doc/iterations/0600-EPIC-formatting]] — wordwrap, reformat, margins, tabs, center
-- ✅ [[doc/iterations/0700-EPIC-search]] — find/replace/repeat
-- ✅ [[doc/iterations/0800-EPIC-block-ops]] — block mark/copy/move/erase/read/write
-- ✅ [[doc/iterations/0900-EPIC-help-docs]] — help menus, toggles, MANUAL.md, README.md
-- ⬜ [[doc/iterations/1000-EPIC-advanced-deferred]] — macros, directory view, windowing (ready; spikes done, directory view shipped, macro/window follow-ups proposed but unstarted)
+- ✅ [[doc/iterations/x0100-EPIC-rust-scaffolding]] — project skeleton, ADRs, terminal backend
+- ✅ [[doc/iterations/x0200-EPIC-rust-text-engine]] — the gap-buffer text engine
+- ✅ [[doc/iterations/x0300-EPIC-rust-screen-loop]] — screen rendering, status line, main loop + dispatch
+- ✅ [[doc/iterations/x0400-EPIC-rust-core-editing]] — insert/delete/undo + cursor movement
+- ✅ [[doc/iterations/x0500-EPIC-rust-file-io]] — load/save/BAK/change-name/quit
+- ✅ [[doc/iterations/x0600-EPIC-rust-formatting]] — wordwrap, reformat, margins, tabs, center
+- ✅ [[doc/iterations/x0700-EPIC-rust-search]] — find/replace/repeat
+- ✅ [[doc/iterations/x0800-EPIC-rust-block-ops]] — block mark/copy/move/erase/read/write
+- ✅ [[doc/iterations/x0900-EPIC-rust-help-docs]] — help menus, toggles, MANUAL.md, README.md
+- ⬜ [[doc/iterations/1000-EPIC-rust-advanced-deferred]] — macros, directory view, windowing (ready; spikes done, directory view shipped, macro/window follow-ups proposed but unstarted)
 
 ## Current epic iterations
 

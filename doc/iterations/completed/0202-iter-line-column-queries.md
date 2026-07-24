@@ -1,6 +1,6 @@
 # 0202 — Line/column queries
 
-Epic: [[doc/iterations/0200-EPIC-text-engine]]
+Epic: [[doc/iterations/x0200-EPIC-rust-text-engine]]
 Status: done
 
 ## Progress

@@ -37,5 +37,5 @@ stops, and center/flush lines — plus the auto-indent and double-space toggles.
   center/flush `5691`.
 - Tabs: `zde17.asm:3856` (`Variable Tabs`), config `zde17.asm:161`-`164`.
 - Auto-indent/double-space: `zde17.asm:4203`, flags `7884`-`7885`.
-- Depends on epic `[[doc/iterations/0200-EPIC-text-engine]]`, ADR
+- Depends on epic `[[doc/iterations/x0200-EPIC-rust-text-engine]]`, ADR
   `[[doc/adr/0002-text-encoding-soft-space]]`.
