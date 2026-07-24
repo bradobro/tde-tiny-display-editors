@@ -2,6 +2,22 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.2.0 - 2026-07-24
+#### Features
+- directory, macros (spike), windowing (spike) (Epic 10) - (639339e) - Brad Olson
+- iteration 9-1 ruler toggles - (28ad487) - Brad Olson
+- epic-0800-block-ops - (3f203f2) - Brad Olson
+- epic-0700-search - (7d730ba) - Brad Olson
+- epic-0600-formatting - (ed69317) - Brad Olson
+- epic-0500-file-io - (3ec944c) - Brad Olson
+#### Documentation
+- manual and readme (i0902) - (43234a4) - Brad Olson
+- notes about rust size - (9440aa4) - Brad Olson
+#### Miscellaneous Chores
+- move rust directory - (ef6f86c) - Brad Olson
+
+- - -
+
 ## v0.1.0 - 2026-07-24
 #### Features
 - start with initial ZDE repo, adding changelog - (1f542f4) - Brad Olson
