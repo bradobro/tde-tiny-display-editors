@@ -1,4 +1,4 @@
-# Epic 0500 — File I/O (Go)
+# Epic 2500 — File I/O (Go)
 
 Status: ready
 

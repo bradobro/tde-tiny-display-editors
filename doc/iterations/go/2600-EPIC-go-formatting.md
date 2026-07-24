@@ -1,4 +1,4 @@
-# Epic 0600 — Formatting (Go)
+# Epic 2600 — Formatting (Go)
 
 Status: ready
 

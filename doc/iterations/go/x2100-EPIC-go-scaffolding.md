@@ -1,4 +1,4 @@
-# Epic 0100 — Scaffolding & Decisions (Go)
+# Epic 2100 — Scaffolding & Decisions (Go)
 
 Status: done
 

@@ -1,4 +1,4 @@
-# Epic 0400 — Core editing & cursor movement (Go)
+# Epic 2400 — Core editing & cursor movement (Go)
 
 Status: ready
 

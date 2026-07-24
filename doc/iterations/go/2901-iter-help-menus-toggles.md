@@ -28,7 +28,7 @@ user-facing command surface.
 
 ## Depends on
 - [[doc/iterations/go/2600-EPIC-go-formatting]],
-  [[doc/iterations/go/2300-EPIC-go-screen-loop]].
+  [[doc/iterations/go/x2300-EPIC-go-screen-loop]].
 
 ## References
 - `rust/src/help.rs`. ASM `DoMnu`/`HelpY` `zde17.asm:7992`.

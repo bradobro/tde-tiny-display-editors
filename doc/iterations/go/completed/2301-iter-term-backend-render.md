@@ -1,12 +1,12 @@
-# 0301 — Terminal backend & text-area render
+# 2301 — Terminal backend & text-area render
 
-Epic: [[doc/iterations/go/2300-EPIC-go-screen-loop]]
-Status: ready
+Epic: [[doc/iterations/go/x2300-EPIC-go-screen-loop]]
+Status: done
 
 ## Progress
-- ⬜ design
-- ⬜ implement
-- ⬜ test
+- ✅ design
+- ✅ implement
+- ✅ test
 
 ## Goal
 

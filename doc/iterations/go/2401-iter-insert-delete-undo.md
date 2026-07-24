@@ -31,7 +31,7 @@ marked block's offsets stay synced.
   restores it; a marked block's offsets are correct after inserts and deletes.
 
 ## Depends on
-- [[doc/iterations/go/2300-EPIC-go-screen-loop]], [[doc/iterations/go/x2200-EPIC-go-text-engine]].
+- [[doc/iterations/go/x2300-EPIC-go-screen-loop]], [[doc/iterations/go/x2200-EPIC-go-text-engine]].
 
 ## References
 - `rust/src/editor.rs` (insert/delete/undo `cmd*`), `rust/src/block.rs`.

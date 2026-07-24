@@ -3,6 +3,9 @@ package screen
 import (
 	"bytes"
 	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 
 	"golang.org/x/term"
 )
@@ -14,16 +17,26 @@ import (
 //
 // This is the untested seam (like crossterm in the Rust port): its correctness
 // is verified by manual smoke-testing, while the pure render helpers and the
-// editor logic are covered by FakeScreen. The interactive wiring (the Ready
-// loop, resize handling) lands in epic 0300 — this file is the M0 scaffold.
+// editor logic are covered by FakeScreen.
 type TermScreen struct {
 	out      *os.File
 	fd       int
 	oldState *term.State
 	frame    bytes.Buffer
 	entered  bool
-	rows     int
-	cols     int
+
+	// mu guards rows/cols: term.GetSize is sampled once in Enter and again,
+	// asynchronously, by the SIGWINCH watcher goroutine (watchResize) on
+	// every live terminal resize, while Size() may be read from the main
+	// goroutine concurrently — hence the lock rather than plain fields.
+	mu   sync.Mutex
+	rows int
+	cols int
+
+	// resizeStop shuts down the SIGWINCH watcher on Leave; nil until Enter
+	// starts it, so Leave (idempotent, may run more than once) only closes
+	// it the first time.
+	resizeStop chan struct{}
 }
 
 // NewTermScreen builds a TermScreen writing to stdout / reading size from stdin.
@@ -41,6 +54,7 @@ func (t *TermScreen) Enter() error {
 	}
 	t.oldState = st
 	t.refreshSize()
+	t.watchResize()
 	// \x1b[?1049h = alternate screen buffer; \x1b[2J = clear; \x1b[2 q = steady
 	// block caret (the visible cursor the Rust port lacked, doc/adr/0008).
 	if _, err := t.out.WriteString("\x1b[?1049h\x1b[2J\x1b[2 q"); err != nil {
@@ -57,6 +71,10 @@ func (t *TermScreen) Leave() error {
 		return nil
 	}
 	t.entered = false
+	if t.resizeStop != nil {
+		close(t.resizeStop)
+		t.resizeStop = nil
+	}
 	// \x1b[0 q = default caret shape; \x1b[?25h = show cursor; \x1b[?1049l = main screen.
 	_, _ = t.out.WriteString("\x1b[0 q\x1b[?25h\x1b[?1049l")
 	if t.oldState != nil {
@@ -67,8 +85,33 @@ func (t *TermScreen) Leave() error {
 
 func (t *TermScreen) refreshSize() {
 	if c, r, err := term.GetSize(t.fd); err == nil {
+		t.mu.Lock()
 		t.cols, t.rows = c, r
+		t.mu.Unlock()
 	}
+}
+
+// watchResize starts the SIGWINCH watcher (iteration 2301). term.GetSize only
+// samples the size once, in Enter — without this, resizing a live terminal
+// would leave Size() reporting the size at startup for the rest of the
+// session. The goroutine exits as soon as Leave closes resizeStop, so it
+// never outlives this TermScreen.
+func (t *TermScreen) watchResize() {
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGWINCH)
+	t.resizeStop = make(chan struct{})
+	stop := t.resizeStop
+	go func() {
+		for {
+			select {
+			case <-sig:
+				t.refreshSize()
+			case <-stop:
+				signal.Stop(sig)
+				return
+			}
+		}
+	}()
 }
 
 func (t *TermScreen) MoveTo(row, col int) error {
@@ -105,6 +148,8 @@ func (t *TermScreen) Flush() error {
 }
 
 func (t *TermScreen) Size() (int, int) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	return t.rows, t.cols
 }
 

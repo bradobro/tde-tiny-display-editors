@@ -1,4 +1,4 @@
-# Epic 1000 — Advanced (mostly deferred) (Go)
+# Epic 3000 — Advanced (mostly deferred) (Go)
 
 Status: ready
 

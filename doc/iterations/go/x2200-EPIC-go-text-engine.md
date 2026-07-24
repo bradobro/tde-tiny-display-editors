@@ -1,4 +1,4 @@
-# Epic 0200 — Text Engine (gap buffer over `[]rune`)
+# Epic 2200 — Text Engine (gap buffer over `[]rune`)
 
 Status: done
 
