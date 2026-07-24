@@ -1,0 +1,45 @@
+# Cocogitto Configuration
+# for Conventional Commits and Changelog Generation.
+# See https://github.com/cocogitto/cocogitto
+# `cog --version` -> "cog 6.1.0"
+# try `curl https://gist.githubusercontent.com/bradobro/44f0919652642ea92bde6270b3b602ab/raw/cog.toml > cog.toml`
+
+disable_bump_commit = false
+disable_changelog = false
+from_latest_tag = true
+generate_mono_repository_global_tag = true
+branch_whitelist = []
+ignore_merge_commits = true
+skip_ci = "[skip ci]"
+skip_untracked = true
+tag_prefix = "v"
+
+pre_bump_hooks = [
+   "[ \"$(git rev-parse --show-toplevel)\" = \"$PWD\" ] || { echo 'ERROR: cog bump must be run from project root'; exit 1; }",
+  "echo 'export const VERSION = \"{{version}}\";' > version.ts",
+  "echo '{{version}}' > version.txt",
+  "echo 'package main\n\nconst VERSION = \"{{version}}\"\n' > version.go",
+  "git add ./version.ts version.txt version.go",
+  "git commit -m 'chore: update version files'",
+]
+
+[git_hooks.commit-msg]
+script = """#!/bin/sh
+set -e
+cog verify --file $1
+"""
+
+[commit_types]
+begin = { changelog_title = "Work Begun", omit_from_changelog = true }
+wip = { changelog_title = "Work in Process", omit_from_changelog = true }
+plan = {changlog_title = "iteration planning", omit_from_changelog = true }
+
+[changelog]
+path = "CHANGELOG.md"
+authors = [
+  { signature = "brad.olson@movedbylight.com", username = "bradobro" }
+]
+
+[bump_profiles]
+
+[monorepo.packages]
