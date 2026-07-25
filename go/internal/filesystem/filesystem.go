@@ -11,6 +11,7 @@ package filesystem
 
 import (
 	"os"
+	"sort"
 	"strings"
 )
 
@@ -68,6 +69,30 @@ func WriteFile(path string, text []rune, makeBackup bool) error {
 		}
 	}
 	return os.WriteFile(path, []byte(string(text)), 0o644)
+}
+
+// ListDirectory lists regular files in dir, sorted by name (ASM Dir,
+// zde17.asm:4663 / rust list_directory, rust/src/filesystem.rs:118), for the
+// ^KF directory picker. Subdirectories are skipped: CP/M had no
+// subdirectories to browse into, and this port doesn't add nested
+// navigation. Dotfiles are skipped unless showHidden is set, standing in
+// for the original's DirSys flag (zde17.asm:153, Config.ShowHiddenFiles).
+func ListDirectory(dir string, showHidden bool) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for _, entry := range entries {
+		if !entry.Type().IsRegular() {
+			continue
+		}
+		if name := entry.Name(); showHidden || !strings.HasPrefix(name, ".") {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names, nil
 }
 
 // backupExisting renames path aside to BackupPath(path) if path exists,

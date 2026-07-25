@@ -152,6 +152,67 @@ func TestWriteFileFirstSaveOfNewFileMakesNoBackup(t *testing.T) {
 	}
 }
 
+// TestListDirectoryListsFilesSortedAndSkipsSubdirs mirrors rust
+// list_directory_lists_files_sorted_and_skips_subdirs, rust/src/filesystem.rs:233.
+func TestListDirectoryListsFilesSortedAndSkipsSubdirs(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"banana.txt", "apple.txt"} {
+		if err := os.WriteFile(filepath.Join(dir, name), nil, 0o644); err != nil {
+			t.Fatalf("setup WriteFile err = %v", err)
+		}
+	}
+	if err := os.Mkdir(filepath.Join(dir, "subdir"), 0o755); err != nil {
+		t.Fatalf("setup Mkdir err = %v", err)
+	}
+
+	names, err := ListDirectory(dir, false)
+	if err != nil {
+		t.Fatalf("ListDirectory err = %v", err)
+	}
+	if got, want := names, []string{"apple.txt", "banana.txt"}; !equalStrings(got, want) {
+		t.Errorf("ListDirectory = %v, want %v", got, want)
+	}
+}
+
+// TestListDirectorySkipsHiddenUnlessShown mirrors rust
+// list_directory_skips_hidden_unless_shown, rust/src/filesystem.rs:243.
+func TestListDirectorySkipsHiddenUnlessShown(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"visible.txt", ".secret"} {
+		if err := os.WriteFile(filepath.Join(dir, name), nil, 0o644); err != nil {
+			t.Fatalf("setup WriteFile err = %v", err)
+		}
+	}
+
+	if got, want := mustList(t, dir, false), []string{"visible.txt"}; !equalStrings(got, want) {
+		t.Errorf("ListDirectory(showHidden=false) = %v, want %v", got, want)
+	}
+	if got, want := mustList(t, dir, true), []string{".secret", "visible.txt"}; !equalStrings(got, want) {
+		t.Errorf("ListDirectory(showHidden=true) = %v, want %v", got, want)
+	}
+}
+
+func mustList(t *testing.T, dir string, showHidden bool) []string {
+	t.Helper()
+	names, err := ListDirectory(dir, showHidden)
+	if err != nil {
+		t.Fatalf("ListDirectory err = %v", err)
+	}
+	return names
+}
+
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func assertFileContent(t *testing.T, path, want string) {
 	t.Helper()
 	got, err := os.ReadFile(path)

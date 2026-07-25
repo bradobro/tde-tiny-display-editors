@@ -22,6 +22,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"unicode"
@@ -358,7 +359,8 @@ func (e *Editor) cmdShowHelp(m help.Menu) {
 // (rust cmd_quit). ^KB/^KK/^KU mark the block's start/end and unmark it;
 // ^KC/^KV/^KY copy/move/erase the marked block; ^KW/^KR write the block to
 // a file and read a file in at the cursor (epic 2800). ^KH shows the block
-// menu (epic 2900).
+// menu (epic 2900). ^KF browses the directory and loads a chosen file
+// (epic 3000).
 func (e *Editor) dispatchBlock(key keyboard.Key) (bool, error) {
 	if key.Kind == keyboard.KCtrl {
 		switch key.R {
@@ -397,6 +399,8 @@ func (e *Editor) dispatchBlock(key keyboard.Key) (bool, error) {
 			return e.cmdWriteBlock()
 		case 'R':
 			return e.cmdReadFileAtCursor()
+		case 'F':
+			return e.cmdDirectoryView()
 		}
 	}
 	e.message = "block command: not yet implemented"
@@ -710,6 +714,119 @@ func (e *Editor) cmdReadFileAtCursor() (bool, error) {
 	return false, nil
 }
 
+// cmdDirectoryView is ^KF (ASM Dir, zde17.asm:4663 / rust
+// cmd_directory_view, rust/src/editor.rs:1116): browse the current working
+// directory and load a chosen file.
+func (e *Editor) cmdDirectoryView() (bool, error) {
+	return e.cmdDirectoryViewIn(".")
+}
+
+// cmdDirectoryViewIn is ^KF's implementation proper, parameterized on the
+// directory to browse (cmdDirectoryView always passes "."). Split out so
+// tests can point it at a scratch directory instead of depending on the
+// test runner's cwd (rust cmd_directory_view_in, rust/src/editor.rs:1124).
+// Lists files only, sorted (filesystem.ListDirectory); the grid is driven
+// by its own key loop (runDirectoryPicker) so arrow keys steer the
+// selection instead of moving the buffer cursor. Same unsaved-changes
+// guard as ^KD/^KQ before an actual load discards the in-memory buffer.
+func (e *Editor) cmdDirectoryViewIn(dir string) (bool, error) {
+	names, err := filesystem.ListDirectory(dir, e.cfg.ShowHiddenFiles)
+	if err != nil {
+		e.message = "directory read failed: " + err.Error()
+		return false, nil
+	}
+	if len(names) == 0 {
+		e.message = "directory is empty"
+		return false, nil
+	}
+	chosen, ok, err := e.runDirectoryPicker(names)
+	if err != nil || !ok {
+		return false, err
+	}
+	if e.modified {
+		confirmed, err := e.confirm("Abandon changes? (Y/N):")
+		if err != nil {
+			return false, err
+		}
+		if !confirmed {
+			e.message = "load cancelled"
+			return false, nil
+		}
+	}
+	e.loadFile(filepath.Join(dir, chosen))
+	return false, nil
+}
+
+// runDirectoryPicker drives the directory grid until the user picks a file
+// (Enter) or backs out (Esc), returning the chosen name and ok=true, or
+// ok=false on cancel (rust run_directory_picker, rust/src/editor.rs:1150).
+// Kept separate from cmdDirectoryView so the picking loop itself doesn't
+// tangle with the load/confirm bookkeeping around it.
+func (e *Editor) runDirectoryPicker(names []string) (string, bool, error) {
+	rows := e.cfg.ScreenLines
+	cols := screen.GridCols(names, e.cfg.ViewColumns)
+	selected := 0
+	for {
+		if err := e.drawDirectoryPage(names, selected, rows); err != nil {
+			return "", false, err
+		}
+		key, err := e.keys.NextKey()
+		if err != nil {
+			return "", false, err
+		}
+		switch {
+		case key.Kind == keyboard.KEsc:
+			return "", false, nil
+		case key.Kind == keyboard.KChar && key.R == '\r':
+			return names[selected], true, nil
+		case key.Kind == keyboard.KUp, key.Kind == keyboard.KDown,
+			key.Kind == keyboard.KLeft, key.Kind == keyboard.KRight:
+			selected = screen.MoveSelection(selected, len(names), cols, key.Kind)
+		}
+	}
+}
+
+// drawDirectoryPage paints one page of the directory grid over the
+// text-area rows, plus a one-line hint on the message row, and flushes
+// immediately — like showPrefixHint, this has to be visible before the
+// picker's next blocking NextKey call, not merely staged for a later
+// redraw (rust draw_directory_page, rust/src/editor.rs:1169).
+func (e *Editor) drawDirectoryPage(names []string, selected, rows int) error {
+	var buf bytes.Buffer
+	buf.WriteString("\x1b[H")
+	screen.RenderHeader(&buf, e.headerInfo())
+	if e.rulerOn {
+		screen.RenderRuler(&buf, e.cfg, e.hscroll)
+	}
+	for _, line := range screen.RenderDirectoryPage(names, selected, rows, e.cfg.ViewColumns) {
+		buf.WriteString(line)
+		buf.WriteString("\x1b[K\r\n")
+	}
+	buf.WriteString("Directory: arrows to move, Enter to load, Esc to cancel")
+	buf.WriteString("\x1b[K\r\n")
+	if err := e.scr.WriteString(buf.String()); err != nil {
+		return err
+	}
+	return e.scr.Flush()
+}
+
+// loadFile replaces the current buffer with path's contents, resetting the
+// same fields resetToNewBuffer does — a fresh document has no meaningful
+// scroll position, block mark, undo slot, or vertical-motion target either
+// (rust filesystem::load_into, rust/src/filesystem.rs:57). A missing file
+// starts a blank buffer under that name, same tolerance as ReadFile gives
+// the initial argv path in main.go.
+func (e *Editor) loadFile(path string) {
+	text, _, err := filesystem.ReadFile(path)
+	if err != nil {
+		e.message = "load failed: " + err.Error()
+		return
+	}
+	e.resetToNewBuffer(path)
+	e.buf = buffer.FromString(string(text))
+	e.topOffset = 0
+}
+
 // dispatchQuick is the ^Q quick-movement/find table (QMnuSt, zde17.asm:632 /
 // rust dispatch_quick, rust/src/editor.rs:491). Line start/end (^QS/^QD),
 // document top/bottom (^QR/^QC), find (^QF) and replace (^QA) are wired;
@@ -745,8 +862,12 @@ func (e *Editor) dispatchQuick(key keyboard.Key) (bool, error) {
 // zde17.asm:577 / rust dispatch_onscreen, rust/src/editor.rs:514). Center/
 // flush, margins, and the tab/ruler/auto-indent/double-space toggles are
 // epic 2600's job; hyphenation/proportional spacing/printing (^OH/^OJ/^OP)
-// stay dropped per ADR 0004, and split-window (^OW) stays deferred to epic
-// 3000.
+// stay dropped per ADR 0004. Split-window (^OW) is a documented seam only,
+// per epic 3000's scope: it falls through to "not yet implemented" below
+// rather than getting a case. If ever picked up, the shrink-text-area hook
+// is Editor.cfg.ScreenLines/textAreaTop/messageRow — the same three
+// quantities the directory picker (cmdDirectoryViewIn) already overlays a
+// second view through, without touching the buffer's own cursor.
 func (e *Editor) dispatchOnScreen(key keyboard.Key) (bool, error) {
 	if key.Kind != keyboard.KCtrl {
 		e.message = "onscreen command: not yet implemented"

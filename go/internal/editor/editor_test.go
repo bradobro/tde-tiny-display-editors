@@ -1369,3 +1369,82 @@ func TestRenderMessageEmitsOneClearedLinePerMessageLine(t *testing.T) {
 		t.Errorf("renderMessage = %q, want %q", got, want)
 	}
 }
+
+// ^KF directory picker (epic 3000). Per the iteration's test plan, these
+// exercise the selection->path mapping through runDirectoryPicker directly
+// rather than driving cmdDirectoryView's real "." directory listing, so
+// they don't depend on the test runner's cwd.
+
+// TestDirectoryPickerEnterReturnsTheSelectedName mirrors rust
+// directory_picker_enter_returns_the_selected_name, rust/src/editor.rs:2357.
+func TestDirectoryPickerEnterReturnsTheSelectedName(t *testing.T) {
+	scr := screen.NewFakeScreen(24, 80)
+	names := []string{"a.txt", "b.txt", "c.txt"}
+	keys := keyboard.NewScriptedKeys(keyboard.Key{Kind: keyboard.KRight}, charKey('\r'))
+	e := New(config.DefaultConfig(), scr, keys, "", "")
+
+	picked, ok, err := e.runDirectoryPicker(names)
+	if err != nil {
+		t.Fatalf("runDirectoryPicker err = %v", err)
+	}
+	if !ok || picked != "b.txt" {
+		t.Errorf("picked = (%q, %v), want (%q, true)", picked, ok, "b.txt")
+	}
+}
+
+// TestDirectoryPickerEscapeCancelsWithNoSelection mirrors rust
+// directory_picker_escape_cancels_with_no_selection, rust/src/editor.rs:2366.
+func TestDirectoryPickerEscapeCancelsWithNoSelection(t *testing.T) {
+	scr := screen.NewFakeScreen(24, 80)
+	names := []string{"a.txt", "b.txt"}
+	keys := keyboard.NewScriptedKeys(keyboard.Key{Kind: keyboard.KRight}, keyboard.Key{Kind: keyboard.KEsc})
+	e := New(config.DefaultConfig(), scr, keys, "", "")
+
+	_, ok, err := e.runDirectoryPicker(names)
+	if err != nil {
+		t.Fatalf("runDirectoryPicker err = %v", err)
+	}
+	if ok {
+		t.Error("ok = true, want false (Esc cancels)")
+	}
+}
+
+// TestDirectoryViewReportsWhenTheDirectoryIsEmpty mirrors rust
+// directory_view_reports_when_the_directory_is_empty, rust/src/editor.rs:2376.
+func TestDirectoryViewReportsWhenTheDirectoryIsEmpty(t *testing.T) {
+	scr := screen.NewFakeScreen(24, 80)
+	e := New(config.DefaultConfig(), scr, keyboard.NewScriptedKeys(), "", "")
+
+	if _, err := e.cmdDirectoryViewIn(t.TempDir()); err != nil {
+		t.Fatalf("cmdDirectoryViewIn err = %v", err)
+	}
+	if e.message != "directory is empty" {
+		t.Errorf("message = %q, want %q", e.message, "directory is empty")
+	}
+}
+
+// TestDirectoryViewLoadsTheChosenFile mirrors rust
+// directory_view_loads_the_chosen_file, rust/src/editor.rs:2387.
+func TestDirectoryViewLoadsTheChosenFile(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "alpha.txt"), []byte("alpha contents"), 0o644); err != nil {
+		t.Fatalf("WriteFile err = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "beta.txt"), []byte("beta contents"), 0o644); err != nil {
+		t.Fatalf("WriteFile err = %v", err)
+	}
+	scr := screen.NewFakeScreen(24, 80)
+	// Sorted listing is [alpha.txt, beta.txt]; Right then Enter picks beta.txt.
+	keys := keyboard.NewScriptedKeys(keyboard.Key{Kind: keyboard.KRight}, charKey('\r'))
+	e := New(config.DefaultConfig(), scr, keys, "", "")
+
+	if _, err := e.cmdDirectoryViewIn(dir); err != nil {
+		t.Fatalf("cmdDirectoryViewIn err = %v", err)
+	}
+	if got, want := e.buf.String(), "beta contents"; got != want {
+		t.Errorf("buffer = %q, want %q", got, want)
+	}
+	if got, want := e.filename, filepath.Join(dir, "beta.txt"); got != want {
+		t.Errorf("filename = %q, want %q", got, want)
+	}
+}
