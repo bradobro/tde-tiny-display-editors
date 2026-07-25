@@ -1,6 +1,6 @@
 # 1902 — Manual reuse & Zig README
 
-Epic: [[doc/iterations/1900-EPIC-zig-help-docs]]
+Epic: [[doc/iterations/x1900-EPIC-zig-help-docs]]
 Status: done
 
 ## Progress
@@ -27,7 +27,7 @@ write `zig/README.md`.
   `rust/README.md`.
 
 ## Depends on
-- [[doc/iterations/1900-EPIC-zig-help-docs]] (feature-complete surface to document).
+- [[doc/iterations/x1900-EPIC-zig-help-docs]] (feature-complete surface to document).
 
 ## References
 - `doc/MANUAL.md`, `rust/README.md`, `[[doc/adr/0007-zig-raw-ansi-backend]]`.

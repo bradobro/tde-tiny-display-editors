@@ -23,9 +23,9 @@ spacing, hyphenation, and CP/M-specific machinery (Z-System message buffer, driv
 
 ## Iterations
 
-- [[doc/iterations/1001-spike-macros]]
-- [[doc/iterations/1002-iter-directory-view]]
-- [[doc/iterations/1003-spike-windowing]]
+- [[doc/iterations/maybe/1001-spike-macros]]
+- [[doc/iterations/maybe/1002-iter-directory-view]]
+- [[doc/iterations/maybe/1003-spike-windowing]]
 
 ## Exit criteria
 
@@ -33,13 +33,13 @@ spacing, hyphenation, and CP/M-specific machinery (Z-System message buffer, driv
 
 ## Status (2026-07-23)
 
-- [[doc/iterations/1002-iter-directory-view]] — **done**, shipped (`^KF`).
-- [[doc/iterations/1001-spike-macros]] — **partial go**: record/replay of the
+- [[doc/iterations/maybe/1002-iter-directory-view]] — **done**, shipped (`^KF`).
+- [[doc/iterations/maybe/1001-spike-macros]] — **partial go**: record/replay of the
   10 numbered macros is small and worth doing; the jump/test/chain/wait
   "programming language" statements are a no-go (redundant with real
   scripting tools on a modern machine). Proposed follow-up:
   `iter-macro-record-replay` (not yet created — awaiting go-ahead).
-- [[doc/iterations/1003-spike-windowing]] — **go**, small-to-medium effort:
+- [[doc/iterations/maybe/1003-spike-windowing]] — **go**, small-to-medium effort:
   port the confirmed behavior (shrink the text area, static second scroll
   position below a separator), not the larger "two independently scrollable
   panes" the original scope wording implied but the ASM doesn't clearly

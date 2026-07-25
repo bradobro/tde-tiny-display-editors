@@ -1,6 +1,6 @@
 # 1801 — Block operations command wiring
 
-Epic: [[doc/iterations/1800-EPIC-zig-block-ops]]
+Epic: [[doc/iterations/x1800-EPIC-zig-block-ops]]
 Status: done
 
 ## Progress
@@ -27,8 +27,8 @@ Wire the `^K` block commands to the already-implemented `block.zig` offset math.
   buffer and correct residual block offsets; `^KW`+`^KR` round-trips a temp file.
 
 ## Depends on
-- [[doc/iterations/1500-EPIC-zig-file-io]] (for `^KW`/`^KR`),
-  [[doc/iterations/1400-EPIC-zig-core-editing]].
+- [[doc/iterations/x1500-EPIC-zig-file-io]] (for `^KW`/`^KR`),
+  [[doc/iterations/x1400-EPIC-zig-core-editing]].
 
 ## References
 - `rust/src/block.rs`, `rust/src/editor.rs`. ASM MARK/block `zde17.asm:4420`.

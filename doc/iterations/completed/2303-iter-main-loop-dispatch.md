@@ -1,12 +1,14 @@
-# 0303 — Main loop, key parsing & dispatch (visible cursor)
+# 2303 — Main loop, key parsing & dispatch (visible cursor)
 
-Epic: [[doc/iterations/go/0300-EPIC-screen-loop]]
-Status: ready
+Epic: [[doc/iterations/x2300-EPIC-go-screen-loop]]
+Status: done
 
 ## Progress
-- ⬜ design
-- ⬜ implement
-- ⬜ test
+- ✅ design
+- ✅ implement
+- ✅ test (unit flows via FakeScreen/ScriptedKeys + non-TTY hang-safety check;
+  manual smoke in a real terminal still needed from an interactive session —
+  this environment has no TTY to test against)
 
 ## Goal
 
@@ -42,8 +44,8 @@ families), and redraw with a **visible, flicker-free caret**.
   restore on exit and on a forced panic.
 
 ## Depends on
-- [[doc/iterations/go/0301-iter-term-backend-render]],
-  [[doc/iterations/go/0302-iter-status-and-ruler]].
+- [[doc/iterations/completed/2301-iter-term-backend-render]],
+  [[doc/iterations/completed/2302-iter-status-and-ruler]].
 
 ## References
 - ASM `Ready:` `zde17.asm:379`, `Case` `1826`, `AdjKey` `924`.

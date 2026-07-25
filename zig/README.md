@@ -2,9 +2,9 @@
 
 A Zig 0.16 port of ZDE 1.7, a WordStar-style full-screen text editor
 reconstituted from Z80 CP/M assembly (`../doc/research/zde/zde17.asm`). This is
-the third implementation in the repo, beside the Rust port (`../rust/`) and a
-planned Go port. See `../doc/MANUAL.md` for the command reference (shared across
-the ports).
+the second of three implementations in the repo, beside the Rust port
+(`../rust/`) and the Go port (`../go/`). See `../doc/MANUAL.md` for the
+command reference (shared across the ports).
 
 **Status:** feature-complete — editing, file I/O, formatting, search, block
 operations, help/docs, and the `^KF` directory view (epics 1100–2000). No
@@ -40,7 +40,27 @@ see `../doc/adr/0006-config-hardcoded-struct.md` for why this port
 deliberately does not reproduce the original's self-modifying-executable
 installer.
 
-## How this port differs from the Rust one
+## Differences from the original
+
+- **Cursor.** Shows a visible caret at the edit position (hidden only for the
+  span of a redraw), matching the original's behavior.
+- **Directory view (`^KF`).** Lists files only (no subdirectories — the
+  original's namespace was flat, CP/M had none to browse), sorted by name,
+  with an optional hidden-file toggle (`Config.show_hidden_files`) standing
+  in for the original's `DirSys` flag.
+- **Macros (`ESC M`, `ESC 0`-`9`).** Not ported — see
+  `../doc/iterations/maybe/1001-spike-macros.md`. The `^KF` directory view is
+  shipped; split-window is a documented seam only, not the full behavior (see
+  below).
+- **Split window (`^OW`).** Not ported. A feasibility spike
+  (`../doc/iterations/maybe/1003-spike-windowing.md`) found the original
+  shrinks the text area and draws a static second view below a separator,
+  rather than two independently scrollable panes; this port leaves the seam
+  (a generalized-viewport renderer) but doesn't implement the toggle.
+- **Dropped permanently:** printing and print page formatting, proportional
+  spacing, and hyphenation — see `../doc/adr/0004-v1-feature-scope.md`.
+
+## Implementation notes (vs. the Rust port)
 
 Recorded in `../doc/adr/0007-zig-raw-ansi-backend.md`:
 
@@ -52,10 +72,6 @@ Recorded in `../doc/adr/0007-zig-raw-ansi-backend.md`:
   `Editor` stays a single non-generic type; test fakes plug in at runtime.
 - **The gap buffer stores `[]u21`** (decoded Unicode scalar values), the analog
   of Rust's `Vec<char>` — no routine reasons about UTF-8 byte boundaries.
-- **A visible text cursor.** The Rust port hides the terminal cursor; this port
-  shows a caret at the edit position (hidden only for the span of a redraw).
-- **No macros.** Not ported in either port (see `../doc/iterations/1001-spike-macros.md`).
-  The `^KF` directory view is shipped; split-window is a documented seam only.
 - **Manual memory management.** One `std.mem.Allocator` is threaded through the
   `Editor`; owned state (buffer store, filename, message, query, undo span) is
   freed explicitly. Tests run under `std.testing.allocator` to catch leaks.

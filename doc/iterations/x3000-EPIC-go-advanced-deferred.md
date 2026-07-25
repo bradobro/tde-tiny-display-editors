@@ -1,6 +1,6 @@
-# Epic 1000 — Advanced (mostly deferred) (Go)
+# Epic 3000 — Advanced (mostly deferred) (Go)
 
-Status: planning
+Status: done
 
 ## Goal
 
@@ -19,7 +19,7 @@ entirely, per ADR `0008`).
 
 ## Iterations
 
-- [[doc/iterations/go/1002-iter-directory-view]]
+- [[doc/iterations/completed/3002-iter-directory-view]]
 
 ## Exit criteria
 

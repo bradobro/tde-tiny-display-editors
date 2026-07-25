@@ -1,6 +1,6 @@
 # 1401 — Insert, delete & undelete
 
-Epic: [[doc/iterations/1400-EPIC-zig-core-editing]]
+Epic: [[doc/iterations/x1400-EPIC-zig-core-editing]]
 Status: done
 
 ## Progress
@@ -33,7 +33,7 @@ block's offsets stay correct.
 - Leak-free under `DebugAllocator`.
 
 ## Depends on
-- [[doc/iterations/1300-EPIC-zig-screen-loop]].
+- [[doc/iterations/x1300-EPIC-zig-screen-loop]].
 
 ## References
 - `rust/src/editor.rs` (delete/undo `cmd_*`), `rust/src/block.rs`. ASM edit

@@ -1,4 +1,4 @@
-# Epic 0100 — Scaffolding & Decisions (Go)
+# Epic 2100 — Scaffolding & Decisions (Go)
 
 Status: done
 
@@ -22,8 +22,8 @@ that records the Go-specific decisions.
 
 ## Iterations
 
-- [[doc/iterations/go/0101-iter-scaffold-config]]
-- [[doc/iterations/go/0102-choice-backend-design]]
+- [[doc/iterations/completed/2101-iter-scaffold-config]]
+- [[doc/iterations/completed/2102-choice-backend-design]]
 
 ## Exit criteria
 

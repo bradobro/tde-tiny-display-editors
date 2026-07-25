@@ -1,6 +1,6 @@
-# Epic 0800 — Block Ops (Go)
+# Epic 2800 — Block Ops (Go)
 
-Status: ready
+Status: done
 
 ## Goal
 
@@ -17,7 +17,7 @@ math: mark, copy, move, erase, and file read/write.
 
 ## Iterations
 
-- [[doc/iterations/go/0801-iter-block-ops]]
+- [[doc/iterations/completed/2801-iter-block-ops]]
 
 ## Exit criteria
 

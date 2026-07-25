@@ -45,6 +45,9 @@ installer.
   signal generation mostly off so `^C` types as a command instead of killing
   the process. `^U` still safely aborts. Terminal state is always restored on
   exit, including on panic. (`doc/adr/0003`)
+- **Cursor.** The original leaves the terminal's own cursor visible at the
+  edit position. This port hides it and relies on the status line's
+  `Ln`/`Cl` fields instead.
 - **Directory view (`^KF`).** Ported. Lists files only (no subdirectories —
   the original's namespace was flat, CP/M had none to browse), sorted by
   name, with an optional hidden-file toggle (`Config::show_hidden_files`)
@@ -53,12 +56,12 @@ installer.
   the feature splits cleanly into keystroke record/replay (small effort,
   worth doing) and a small interpreted "macro language" (jump, conditional,
   chain, wait) that's redundant with modern scripting tools. Neither half is
-  implemented yet. See `doc/iterations/1001-spike-macros.md`.
+  implemented yet. See `doc/iterations/maybe/1001-spike-macros.md`.
 - **Split window (`^OW`).** Not ported. A feasibility spike found the
   original shrinks the text area and draws a static second view below a
   separator, rather than two independently scrollable panes — smaller than
   it first sounds, and judged a small-to-medium effort if picked up. Not
-  implemented yet. See `doc/iterations/1003-spike-windowing.md`.
+  implemented yet. See `doc/iterations/maybe/1003-spike-windowing.md`.
 - **Dropped permanently:** printing and print page formatting, proportional
   spacing, hyphenation, and CP/M-specific machinery (Z-System message
   buffer, drive/user areas, the self-modifying installer, clock-speed delay

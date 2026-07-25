@@ -30,4 +30,4 @@ Rust epic-1000 macro spike is skipped entirely here.
 
 - `rust/src/screen.rs` (`render_directory_page`, `move_selection`, `grid_cols`),
   `rust/src/filesystem.rs` (`listDirectory`).
-- Depends on `[[doc/iterations/1500-EPIC-zig-file-io]]`.
+- Depends on `[[doc/iterations/x1500-EPIC-zig-file-io]]`.

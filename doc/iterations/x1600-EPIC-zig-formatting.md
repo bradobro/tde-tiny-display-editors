@@ -31,4 +31,4 @@ paragraph reflow, and centering — the `^O` family and `^B`.
 
 - ASM formatter `zde17.asm:5214`; column update `zde17.asm:5378`.
 - `rust/src/format.rs`. Depends on
-  `[[doc/iterations/1400-EPIC-zig-core-editing]]`.
+  `[[doc/iterations/x1400-EPIC-zig-core-editing]]`.

@@ -1,6 +1,6 @@
-# Epic 0300 — Screen rendering & main loop (Go)
+# Epic 2300 — Screen rendering & main loop (Go)
 
-Status: ready
+Status: done
 
 ## Goal
 
@@ -25,9 +25,9 @@ improvement over the Rust version.
 
 ## Iterations
 
-- [[doc/iterations/go/0301-iter-term-backend-render]]
-- [[doc/iterations/go/0302-iter-status-and-ruler]]
-- [[doc/iterations/go/0303-iter-main-loop-dispatch]]
+- [[doc/iterations/completed/2301-iter-term-backend-render]]
+- [[doc/iterations/completed/2302-iter-status-and-ruler]]
+- [[doc/iterations/completed/2303-iter-main-loop-dispatch]]
 
 ## Exit criteria
 

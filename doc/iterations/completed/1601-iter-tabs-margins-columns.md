@@ -1,6 +1,6 @@
 # 1601 — Tabs, margins & column tracking
 
-Epic: [[doc/iterations/1600-EPIC-zig-formatting]]
+Epic: [[doc/iterations/x1600-EPIC-zig-formatting]]
 Status: done
 
 ## Progress
@@ -27,7 +27,7 @@ tab stops, and margins.
   variable-stop insert/remove, column with mixed tabs/margins.
 
 ## Depends on
-- [[doc/iterations/1400-EPIC-zig-core-editing]].
+- [[doc/iterations/x1400-EPIC-zig-core-editing]].
 
 ## References
 - `rust/src/format.rs`. ASM column update `zde17.asm:5378`, tabs `VTList`

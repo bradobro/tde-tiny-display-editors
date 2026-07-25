@@ -1,4 +1,4 @@
-# Epic 0200 — Text Engine (gap buffer over `[]rune`)
+# Epic 2200 — Text Engine (gap buffer over `[]rune`)
 
 Status: done
 
@@ -23,8 +23,8 @@ of the original, and the heart of the editor.
 
 ## Iterations
 
-- [[doc/iterations/go/0201-iter-gap-buffer-core]]
-- [[doc/iterations/go/0202-iter-line-column-queries]]
+- [[doc/iterations/completed/2201-iter-gap-buffer-core]]
+- [[doc/iterations/completed/2202-iter-line-column-queries]]
 
 ## Exit criteria
 

@@ -1,6 +1,6 @@
 # 1901 — Help menus, ruler & toggles
 
-Epic: [[doc/iterations/1900-EPIC-zig-help-docs]]
+Epic: [[doc/iterations/x1900-EPIC-zig-help-docs]]
 Status: done
 
 ## Progress
@@ -27,8 +27,8 @@ user-facing command surface.
   and ruler render asserted as framebuffer bytes.
 
 ## Depends on
-- [[doc/iterations/1600-EPIC-zig-formatting]],
-  [[doc/iterations/1300-EPIC-zig-screen-loop]].
+- [[doc/iterations/x1600-EPIC-zig-formatting]],
+  [[doc/iterations/x1300-EPIC-zig-screen-loop]].
 
 ## References
 - `rust/src/help.rs`. ASM `DoMnu`/`HelpY` `zde17.asm:7992`.
