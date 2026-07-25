@@ -257,10 +257,9 @@ func (e *Editor) dispatchChar(r rune) {
 // dispatchCtrl handles a bare control chord from the main table (MnuSt,
 // zde17.asm:403 / rust Editor::dispatch, rust/src/editor.rs:294). The prefix
 // keys, ^V (toggle insert), ^B reform and ^I tab (epic 2600), ^L/^\ repeat-
-// find (epic 2700), and this epic's edit/movement commands are wired for
-// real; every other bare control key (^T delete-word, ^W/^Z single-line
-// scroll, help, ...) is out of scope here and lands with help in a later
-// epic.
+// find (epic 2700), ^J help (epic 2900), and this epic's edit/movement
+// commands are wired for real; every other bare control key (^T delete-
+// word, ^W/^Z single-line scroll, ...) stays out of scope.
 // Note ^S/^D/^E/^X are deliberately NOT bound to movement here: neither the
 // ASM's MnuSt table nor rust/src/editor.rs::dispatch binds those letters —
 // movement by char/line at the bare-key level is arrow-keys-only, and S/D/
@@ -295,6 +294,8 @@ func (e *Editor) dispatchCtrl(letter rune) (bool, error) {
 		e.cmdTab()
 	case 'L', '\\':
 		return e.cmdRepeatFind()
+	case 'J':
+		e.cmdShowHelp(help.MenuMain)
 	default:
 		e.message = "not yet implemented"
 	}
@@ -338,13 +339,26 @@ func (e *Editor) showPrefixHint(menu help.Menu) error {
 	return e.scr.Flush()
 }
 
+// cmdShowHelp is ^J (bare) / ^KH — show the command menu for m (ASM DoMnu,
+// zde17.asm:7994 / rust cmd_show_help, rust/src/editor.rs:852), honoring
+// Config.HelpMenus the same way the ASM checks its Help flag: the full
+// per-key listing when it's on, else the same one-line hint a prefix key
+// already shows while it's pending. Unlike showPrefixHint (which writes
+// straight to the screen because it has to appear before a blocking
+// NextKey), this just sets e.message — the next redraw paints it, and
+// renderMessage already knows how to lay out a multi-line message.
+func (e *Editor) cmdShowHelp(m help.Menu) {
+	e.message = help.RenderMenu(m, e.cfg.HelpMenus)
+}
+
 // dispatchBlock is the ^K block-family table (KMnuSt, zde17.asm:479 / rust
 // dispatch_block, rust/src/editor.rs:355). ^KS/^KX/^KD/^KN are the file I/O
 // commands (epic 2500, ported from rust cmd_save/cmd_save_exit/cmd_save_new/
 // cmd_change_name); ^KQ quits, confirming first if the buffer is modified
 // (rust cmd_quit). ^KB/^KK/^KU mark the block's start/end and unmark it;
 // ^KC/^KV/^KY copy/move/erase the marked block; ^KW/^KR write the block to
-// a file and read a file in at the cursor (epic 2800).
+// a file and read a file in at the cursor (epic 2800). ^KH shows the block
+// menu (epic 2900).
 func (e *Editor) dispatchBlock(key keyboard.Key) (bool, error) {
 	if key.Kind == keyboard.KCtrl {
 		switch key.R {
@@ -366,6 +380,9 @@ func (e *Editor) dispatchBlock(key keyboard.Key) (bool, error) {
 			return false, nil
 		case 'U':
 			e.blk = block.Block{}
+			return false, nil
+		case 'H':
+			e.cmdShowHelp(help.MenuBlock)
 			return false, nil
 		case 'C':
 			e.cmdCopyBlock()
@@ -1508,12 +1525,17 @@ func (e *Editor) redraw() error {
 	return e.placeCaretAndShow()
 }
 
-// renderMessage appends the status/message row (ASM prompt window, MakWin
-// zde17.asm:6858). Always written, even when empty, so a shorter message
-// clears out whatever a longer one left there last frame.
+// renderMessage appends the status/message row(s) (ASM prompt window, MakWin
+// zde17.asm:6858 / rust draw_message, rust/src/editor.rs:260). Always written,
+// even when empty, so a shorter message clears out whatever a longer one left
+// there last frame. A message can span multiple lines — e.g. help.FullText's
+// per-key menu listing — so each line gets its own clear-to-end-of-line
+// before the \r\n, matching rust's per-line message.lines() loop.
 func (e *Editor) renderMessage(buf *bytes.Buffer) {
-	buf.WriteString(e.message)
-	buf.WriteString("\x1b[K\r\n")
+	for _, line := range strings.Split(e.message, "\n") {
+		buf.WriteString(line)
+		buf.WriteString("\x1b[K\r\n")
+	}
 }
 
 // placeCaretAndShow moves the real terminal cursor to the caret position and

@@ -1,6 +1,6 @@
 # Epic 2900 — Help & Docs (Go)
 
-Status: ready
+Status: done
 
 ## Goal
 
@@ -19,8 +19,8 @@ write `go/README.md`).
 
 ## Iterations
 
-- [[doc/iterations/go/2901-iter-help-menus-toggles]]
-- [[doc/iterations/go/2902-iter-manual-readme]]
+- [[doc/iterations/go/completed/2901-iter-help-menus-toggles]]
+- [[doc/iterations/go/completed/2902-iter-manual-readme]]
 
 ## Exit criteria
 

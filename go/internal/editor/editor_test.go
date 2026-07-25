@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1298,5 +1299,73 @@ func TestGlobalReplaceChangesEveryMatchWithoutPrompting(t *testing.T) {
 	}
 	if !strings.Contains(e.message, "3 replaced") {
 		t.Errorf("message = %q, want it to mention 3 replaced", e.message)
+	}
+}
+
+// TestCtrlJShowsTheFullMainMenuWhenHelpMenusOn mirrors rust
+// cmd_show_help's full-text path, rust/src/editor.rs:852, ported for the
+// bare ^J (main menu) case.
+func TestCtrlJShowsTheFullMainMenuWhenHelpMenusOn(t *testing.T) {
+	scr := screen.NewFakeScreen(24, 80)
+	cfg := config.DefaultConfig()
+	cfg.HelpMenus = true
+	e := New(cfg, scr, keyboard.NewScriptedKeys(), "", "abc")
+
+	if _, err := e.dispatchCtrl('J'); err != nil {
+		t.Fatalf("dispatchCtrl('J') err = %v", err)
+	}
+	if got, want := e.message, help.FullText(help.MenuMain); got != want {
+		t.Errorf("message = %q, want %q", got, want)
+	}
+}
+
+// TestCtrlJShowsTheMainHintWhenHelpMenusOff mirrors the hint fallback in
+// help.RenderMenu (help.go), the same gating rust's render_menu applies.
+func TestCtrlJShowsTheMainHintWhenHelpMenusOff(t *testing.T) {
+	scr := screen.NewFakeScreen(24, 80)
+	cfg := config.DefaultConfig()
+	cfg.HelpMenus = false
+	e := New(cfg, scr, keyboard.NewScriptedKeys(), "", "abc")
+
+	if _, err := e.dispatchCtrl('J'); err != nil {
+		t.Fatalf("dispatchCtrl('J') err = %v", err)
+	}
+	if got, want := e.message, help.Hint(help.MenuMain); got != want {
+		t.Errorf("message = %q, want %q", got, want)
+	}
+}
+
+// TestCtrlKHShowsTheFullBlockMenuWhenHelpMenusOn covers the ^KH path through
+// dispatchBlock, mirroring the same cmd_show_help wiring as ^J but for the
+// block-command family.
+func TestCtrlKHShowsTheFullBlockMenuWhenHelpMenusOn(t *testing.T) {
+	scr := screen.NewFakeScreen(24, 80)
+	cfg := config.DefaultConfig()
+	cfg.HelpMenus = true
+	e := New(cfg, scr, keyboard.NewScriptedKeys(), "", "abc")
+
+	if _, err := e.dispatchBlock(ctrlKey('H')); err != nil {
+		t.Fatalf("dispatchBlock('H') err = %v", err)
+	}
+	if got, want := e.message, help.FullText(help.MenuBlock); got != want {
+		t.Errorf("message = %q, want %q", got, want)
+	}
+}
+
+// TestRenderMessageEmitsOneClearedLinePerMessageLine locks in the
+// multi-line message rendering renderMessage needed once help.FullText
+// started returning \n-joined text (mirrors rust draw_message's
+// msg.lines() loop, rust/src/editor.rs:260).
+func TestRenderMessageEmitsOneClearedLinePerMessageLine(t *testing.T) {
+	scr := screen.NewFakeScreen(24, 80)
+	e := New(config.DefaultConfig(), scr, keyboard.NewScriptedKeys(), "", "abc")
+	e.message = "line one\nline two\nline three"
+
+	var buf bytes.Buffer
+	e.renderMessage(&buf)
+
+	want := "line one\x1b[K\r\n" + "line two\x1b[K\r\n" + "line three\x1b[K\r\n"
+	if got := buf.String(); got != want {
+		t.Errorf("renderMessage = %q, want %q", got, want)
 	}
 }

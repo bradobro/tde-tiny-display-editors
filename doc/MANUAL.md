@@ -1,6 +1,6 @@
 # ZDE Manual
 
-Command reference for the Rust port of ZDE/VDE, a WordStar-style editor.
+Command reference for the ZDE ports of VDE, a WordStar-style editor.
 Commands are grouped by prefix family, matching the original's `Prefix`
 dispatch (`zde17.asm:676`) and this port's `dispatch`/`dispatch_block`/
 `dispatch_quick`/`dispatch_onscreen` tables (`src/editor.rs`).
@@ -26,6 +26,9 @@ Format: `NAME*  Pg 1  Ln 1  Cl 51  INS AI DS VT HCR`
 | `HCR` | showing hard carriage returns (`^OD`) |
 
 The `AI`/`DS`/`VT`/`HCR` letters only appear when that toggle is on.
+
+Cursor: the Go and Zig ports draw a visible block caret; the Rust port hides
+the terminal cursor and relies on the status line's `Ln`/`Cl` fields instead.
 
 ## Ruler
 
@@ -136,10 +139,10 @@ Toggles and layout.
 
 ## Not ported
 
-- **Macros** (`ESC M` record, `ESC 0`-`9` play) — deferred. A record/replay
-  subset is a proposed, unstarted follow-up; the jump/test/chain/wait
-  "programming language" statements are a permanent no-go. See
-  `doc/iterations/1001-spike-macros.md`.
+- **Macros** (`ESC M` record, `ESC 0`-`9` play) — deferred, absent from every
+  port so far (Rust and Go alike). A record/replay subset is a proposed,
+  unstarted follow-up; the jump/test/chain/wait "programming language"
+  statements are a permanent no-go. See `doc/iterations/1001-spike-macros.md`.
 - **Split window** (`^OW`) — deferred. Spike recommends a small-to-medium
   effort port (shrink the text area + static second view); not yet
   implemented. See `doc/iterations/1003-spike-windowing.md`.

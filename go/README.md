@@ -3,11 +3,14 @@
 A Go port of ZDE 1.7, a WordStar-style full-screen text editor reconstituted
 from Z80 CP/M assembly (`../doc/research/zde/zde17.asm`). This is the third
 implementation in the repo, beside the Rust port (`../rust/`) and the Zig port
-(`../zig/`). See `../doc/MANUAL.md` for the command reference (shared across the
-ports).
+(`../zig/`). See `../doc/MANUAL.md` for the command reference (shared across
+the ports).
 
-**Status:** scaffolding + text engine (epics 0100–0200). The interactive editor
-loop lands in epic 0300. See `../doc/iterations/go/all.md` for the plan.
+**Status:** core v1 complete — editing, file I/O, formatting, search &
+replace, block ops, and help/docs (epics 2100–2900). See
+`../doc/iterations/go/` for the plan and per-epic progress; `2100-2900` are
+this port's epics, kept in that directory (not yet merged up a level, and not
+yet reflected in the top-level `all.md`).
 
 ## Build & run
 
@@ -16,8 +19,26 @@ Requires Go **1.26+**. One dependency: `golang.org/x/term`.
 ```sh
 go build ./...        # compile
 go test ./...         # run all unit tests
-go run . FILE         # run the editor on FILE (once epic 0300 lands)
+go run . FILE         # run the editor on FILE, or an empty UNTITLED buffer
 ```
+
+Or via the `Makefile`:
+
+```sh
+make build     # go build -o zde
+make run       # go run .
+make test      # go test ./...
+make release   # smallest-size release build (stripped, trimmed paths)
+```
+
+## Configuration
+
+There is no config file and no installer. Defaults live in `config.Config`
+(`internal/config/config.go`), a plain struct populated from the ASM's
+original "USER PATCHABLE VALUES" block. To change a default, edit that struct
+and rebuild — see `../doc/adr/0006-config-hardcoded-struct.md` for why this
+port deliberately does not reproduce the original's self-modifying-executable
+installer.
 
 ## How this port differs from the Rust one
 
@@ -35,8 +56,8 @@ Recorded in `../doc/adr/0008-go-xterm-ansi-backend.md`:
   no routine reasons about UTF-8 byte boundaries.
 - **A visible text cursor.** The Rust port hides the terminal cursor; this port
   shows a caret at the edit position (hidden only for the span of a redraw).
-- **No macros.** The `^KF` directory view is kept; split-window is a documented
-  seam only.
+- **No macros.** Deferred in every port so far, Rust included. The `^KF`
+  directory view is kept; split-window is a documented seam only.
 - **No manual memory.** The garbage collector owns the buffer store, filename,
   message, query, and undo span — none of the Zig port's `deinit`/free-on-replace
   bookkeeping.
@@ -55,5 +76,5 @@ internal/
   search/search.go          Query + FindFrom
   block/block.go            Block offsets + adjust on edit
   format/format.go          column/tab math, wrap/reflow/center
-  help/help.go              menus + ruler
+  help/help.go              menus (hint + full text)
 ```
