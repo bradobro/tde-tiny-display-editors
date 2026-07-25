@@ -1,6 +1,6 @@
 # Epic 1900 — Help & docs (Zig)
 
-Status: ready
+Status: done
 
 ## Goal
 
@@ -20,8 +20,8 @@ README).
 
 ## Iterations
 
-- [[doc/iterations/1901-iter-help-menus-toggles]]
-- [[doc/iterations/1902-iter-manual-readme]]
+- [[doc/iterations/completed/1901-iter-help-menus-toggles]]
+- [[doc/iterations/completed/1902-iter-manual-readme]]
 
 ## Exit criteria
 

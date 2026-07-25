@@ -57,7 +57,7 @@ How this port differs from the Rust one (see ADR 0007):
 - ✅ [[doc/iterations/1600-EPIC-zig-formatting]] — wordwrap, reformat, margins, tabs, center
 - ✅ [[doc/iterations/1700-EPIC-zig-search]] — find/replace/repeat
 - ✅ [[doc/iterations/1800-EPIC-zig-block-ops]] — block mark/copy/move/erase/read/write
-- ⬜ [[doc/iterations/1900-EPIC-zig-help-docs]] — help menus, toggles, MANUAL edits, README
+- ✅ [[doc/iterations/1900-EPIC-zig-help-docs]] — help menus, toggles, MANUAL edits, README
 - ⬜ [[doc/iterations/2000-EPIC-zig-advanced-deferred]] — directory view; windowing seam (no macros)
 
 ### Zig: 1100 — Scaffolding & Decisions
@@ -100,8 +100,8 @@ How this port differs from the Rust one (see ADR 0007):
 
 ### Zig: 1900 — Help & Docs
 
-- ⬜ [[doc/iterations/1901-iter-help-menus-toggles]] — prefix help menus, ruler, remaining toggles
-- ⬜ [[doc/iterations/1902-iter-manual-readme]] — reuse `doc/MANUAL.md` (small edits) + write `zig/README.md`
+- ✅ [[doc/iterations/completed/1901-iter-help-menus-toggles]] — prefix help menus, ruler, remaining toggles
+- ✅ [[doc/iterations/completed/1902-iter-manual-readme]] — reuse `doc/MANUAL.md` (small edits) + write `zig/README.md`
 
 ### Zig: 2000 — Advanced (mostly deferred)
 

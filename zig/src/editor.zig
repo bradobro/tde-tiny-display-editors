@@ -471,8 +471,12 @@ pub const Editor = struct {
         return .cont;
     }
 
+    /// `^J`/`^KH` — show the command menu for `menu` (ASM `DoMnu`,
+    /// `zde17.asm:7994`), honoring `Config.help_menus`: the full per-key
+    /// listing when help is on, else the same one-line hint a pending
+    /// prefix key already shows (`showPrefixHint`).
     fn cmdShowHelp(self: *Self, menu: help.Menu) !CommandResult {
-        try self.setMessage("{s}", .{help.hint(menu)});
+        try self.setMessage("{s}", .{help.renderMenu(menu, self.cfg.help_menus)});
         return .cont;
     }
 
@@ -2180,4 +2184,31 @@ test "read file at cursor inserts the file's contents" {
     const text = try bufferText(&ed);
     defer testing.allocator.free(text);
     try testing.expectEqualStrings("aXYZb", text);
+}
+
+// --- help menus & ruler (epic 1900) ---------------------------------------
+
+test "unmapped block key sets an unsupported message" {
+    var ed = Editor.init(testing.allocator, .{});
+    defer ed.deinit();
+    var fake = FakeScreen.init(testing.allocator);
+    defer fake.deinit();
+    var sk = ScriptedKeys.init(&.{});
+    const result = try ed.dispatchBlock(.{ .ctrl = 'Z' }, sk.source(), fake.screen());
+    try testing.expectEqual(CommandResult.cont, result);
+    try testing.expect(std.mem.indexOf(u8, ed.message.?, "not implemented") != null);
+}
+
+test "help key shows the full menu when help_menus is on" {
+    var ed = Editor.init(testing.allocator, .{ .help_menus = true });
+    defer ed.deinit();
+    _ = try ed.cmdShowHelp(.main);
+    try testing.expect(std.mem.indexOf(u8, ed.message.?, "Main commands") != null);
+}
+
+test "help key shows the compact hint when help_menus is off" {
+    var ed = Editor.init(testing.allocator, .{ .help_menus = false });
+    defer ed.deinit();
+    _ = try ed.cmdShowHelp(.main);
+    try testing.expectEqualStrings(help.hint(.main), ed.message.?);
 }

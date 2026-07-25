@@ -21,7 +21,10 @@ pub const Menu = enum {
 };
 
 /// A single-line hint shown while `Config.help_menus` is off (ASM `HlpMsg`
-/// area, `zde17.asm:7992`). Full menu text arrives in iteration 1901.
+/// area, `zde17.asm:7992`), and always while a prefix key is pending —
+/// `dispatchPrefix`'s hint line never grows into the full menu, matching
+/// the Rust port's `show_prefix_hint` (which hardcodes `help_menus = false`
+/// so a pending prefix doesn't blow past the one status line it's shown on).
 pub fn hint(menu: Menu) []const u8 {
     return switch (menu) {
         .main => "^K block  ^Q quick  ^O onscreen  ^U undel  ^V ins  ESC prefix",
@@ -30,6 +33,55 @@ pub fn hint(menu: Menu) []const u8 {
         .onscreen => "^O: C center F flush L left-margin R right-margin T ruler S dbl-space A auto-indent V var-tabs D show-CR",
         .escape => "ESC: synonym for ^K (block) commands",
     };
+}
+
+/// The fuller per-key menu shown when `Config.help_menus` is on (the `^J`/
+/// `^KH` help key only — a pending prefix always gets the compact `hint`).
+fn fullText(menu: Menu) []const u8 {
+    return switch (menu) {
+        .main =>
+        \\Main commands (bare control keys):
+        \\  ^A/^F word left/right   ^B reform paragraph
+        \\  ^C/^R page down/up      ^G/DEL delete char right/left
+        \\  ^I tab                  ^J help
+        \\  ^K block prefix         ^L / ^\ repeat find
+        \\  ^M return               ^N return + auto-indent
+        \\  ^O onscreen prefix      ^P literal control char
+        \\  ^Q quick prefix         ^T delete word
+        \\  ^U undelete             ^V toggle insert/overtype
+        \\  ^W/^Z scroll up/down    Up/Down/Left/Right move cursor
+        \\  ^Y erase line
+        ,
+        .block =>
+        \\Block (^K) commands:
+        \\  B mark begin   K mark end     U unmark
+        \\  C copy block   V move block   Y erase block
+        \\  R read file    W write block  F directory
+        \\  L load file    N change name  S save
+        \\  X save & exit  D save & new   Q quit
+        ,
+        .quick =>
+        \\Quick (^Q) commands:
+        \\  F find       A replace      R top of file   C end of file
+        \\  S line start D line end     U undelete line Y erase to eol
+        \\  Up/Down/Left/Right jump moves, DEL erase to line start
+        ,
+        .onscreen =>
+        \\Onscreen (^O) commands:
+        \\  C center     F flush right  L set left margin  R set right margin
+        \\  T ruler      S double-space A auto-indent      V variable tabs
+        \\  D show hard CR   Up make current line the top of screen
+        ,
+        .escape => "ESC is a synonym prefix for the ^K block commands.",
+    };
+}
+
+/// The menu text to show for `menu`, honoring `help_menus`: the full per-key
+/// listing when help is on, else the same compact `hint` a pending prefix
+/// key shows. Used by `^J`/`^KH` (`cmdShowHelp`); analog of `render_menu`
+/// (`rust/src/help.rs`).
+pub fn renderMenu(menu: Menu, help_menus: bool) []const u8 {
+    return if (help_menus) fullText(menu) else hint(menu);
 }
 
 /// Draw the ruler: `L`/`R` at the margins, `!` at each tab stop, `.`
@@ -77,6 +129,14 @@ test "hint text exists for every menu" {
         const m: Menu = @enumFromInt(f.value);
         try testing.expect(hint(m).len > 0);
     }
+}
+
+test "renderMenu shows the hint when help_menus is off" {
+    try testing.expectEqualStrings(hint(.block), renderMenu(.block, false));
+}
+
+test "renderMenu shows the full text when help_menus is on" {
+    try testing.expect(std.mem.indexOf(u8, renderMenu(.quick, true), "find") != null);
 }
 
 test "renderRuler marks margins and tabs" {
