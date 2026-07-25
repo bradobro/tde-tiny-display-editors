@@ -1,0 +1,7 @@
+1300-EPIC-zig-screen-loop.md	_shenwei356-brename_	x1300-EPIC-zig-screen-loop.md
+1400-EPIC-zig-core-editing.md	_shenwei356-brename_	x1400-EPIC-zig-core-editing.md
+1500-EPIC-zig-file-io.md	_shenwei356-brename_	x1500-EPIC-zig-file-io.md
+1600-EPIC-zig-formatting.md	_shenwei356-brename_	x1600-EPIC-zig-formatting.md
+1700-EPIC-zig-search.md	_shenwei356-brename_	x1700-EPIC-zig-search.md
+1800-EPIC-zig-block-ops.md	_shenwei356-brename_	x1800-EPIC-zig-block-ops.md
+1900-EPIC-zig-help-docs.md	_shenwei356-brename_	x1900-EPIC-zig-help-docs.md
