@@ -1,8 +1,9 @@
 # ZDE Manual
 
-Command reference for the ZDE ports of VDE, a WordStar-style editor.
-Commands are grouped by prefix family, matching the original's `Prefix`
-dispatch (`zde17.asm:676`) and this port's `dispatch`/`dispatch_block`/
+Command reference for the ZDE ports of ZDE/VDE, a WordStar-style editor.
+Commands are common to both the Rust port (`rust/`) and the Zig port
+(`zig/`), grouped by prefix family, matching the original's `Prefix`
+dispatch (`zde17.asm:676`) and each port's `dispatch`/`dispatch_block`/
 `dispatch_quick`/`dispatch_onscreen` tables (`src/editor.rs`).
 
 Notation: `^X` means Control-X. `ESC` is a synonym prefix for the `^K` block

@@ -11,7 +11,7 @@ second reference implementation in **Zig 0.16** under `zig/`, meant to be worked
 independently in its own git worktree (a Go port proceeds in a third). The Rust
 port, its ADRs (`0001`-`0006`), and `doc/MANUAL.md` are the spec; this ADR
 records the Zig-specific decisions that diverge from or refine the Rust choices.
-The Zig plan lives in `[[doc/iterations/zig/all]]`.
+The Zig plan lives in `[[doc/iterations/all]]`.
 
 The project's headline question is "how small/faithful can this editor be?" The
 Rust build is ~660k with one dependency (crossterm). Zig with **zero
@@ -101,4 +101,4 @@ cursor). `zig/README.md` covers build/run and how this port differs.
 - Inherits `[[doc/adr/0002-text-encoding-soft-space]]`,
   `[[doc/adr/0003-reserved-control-keys]]`, `[[doc/adr/0004-v1-feature-scope]]`,
   `[[doc/adr/0005-buffer-data-structure]]`, `[[doc/adr/0006-config-hardcoded-struct]]`.
-- Zig plan: `[[doc/iterations/zig/all]]`.
+- Zig plan: `[[doc/iterations/all]]`.
