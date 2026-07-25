@@ -1,12 +1,12 @@
-# 0601 — Columns, tabs & margins
+# 2601 — Columns, tabs & margins
 
-Epic: [[doc/iterations/go/2600-EPIC-go-formatting]]
-Status: ready
+Epic: [[doc/iterations/go/x2600-EPIC-go-formatting]]
+Status: done
 
 ## Progress
-- ⬜ design
-- ⬜ implement
-- ⬜ test
+- ✅ design
+- ✅ implement
+- ✅ test
 
 ## Goal
 

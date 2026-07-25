@@ -21,6 +21,7 @@ package editor
 import (
 	"bytes"
 	"io"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -28,6 +29,7 @@ import (
 	"zde/internal/buffer"
 	"zde/internal/config"
 	"zde/internal/filesystem"
+	"zde/internal/format"
 	"zde/internal/help"
 	"zde/internal/keyboard"
 	"zde/internal/screen"
@@ -253,10 +255,11 @@ func (e *Editor) dispatchChar(r rune) {
 
 // dispatchCtrl handles a bare control chord from the main table (MnuSt,
 // zde17.asm:403 / rust Editor::dispatch, rust/src/editor.rs:294). The prefix
-// keys, ^V (toggle insert), and this epic's edit/movement commands are
-// wired for real; every other bare control key (^B reform, ^T delete-word,
-// ^W/^Z single-line scroll, help, search/replace synonyms, ...) is out of
-// this epic's scope and lands with formatting/search/help in later epics.
+// keys, ^V (toggle insert), ^B reform and ^I tab (epic 2600), and this
+// epic's edit/movement commands are wired for real; every other bare
+// control key (^T delete-word, ^W/^Z single-line scroll, help, search/
+// replace synonyms, ...) is out of scope here and lands with search/help in
+// later epics.
 // Note ^S/^D/^E/^X are deliberately NOT bound to movement here: neither the
 // ASM's MnuSt table nor rust/src/editor.rs::dispatch binds those letters —
 // movement by char/line at the bare-key level is arrow-keys-only, and S/D/
@@ -285,6 +288,10 @@ func (e *Editor) dispatchCtrl(letter rune) (bool, error) {
 		e.pageForward()
 	case 'R':
 		e.pageBackward()
+	case 'B':
+		e.cmdReform()
+	case 'I':
+		e.cmdTab()
 	default:
 		e.message = "not yet implemented"
 	}
@@ -585,10 +592,42 @@ func (e *Editor) dispatchQuick(key keyboard.Key) (bool, error) {
 }
 
 // dispatchOnScreen is the ^O onscreen toggles/margins table (OMnuSt,
-// zde17.asm:577). A stub for this epic — margins/ruler/format toggles land
-// in epic 2600.
-func (e *Editor) dispatchOnScreen(keyboard.Key) (bool, error) {
-	e.message = "onscreen command: not yet implemented"
+// zde17.asm:577 / rust dispatch_onscreen, rust/src/editor.rs:514). Center/
+// flush, margins, and the tab/ruler/auto-indent/double-space toggles are
+// epic 2600's job; hyphenation/proportional spacing/printing (^OH/^OJ/^OP)
+// stay dropped per ADR 0004, and split-window (^OW) stays deferred to epic
+// 3000.
+func (e *Editor) dispatchOnScreen(key keyboard.Key) (bool, error) {
+	if key.Kind != keyboard.KCtrl {
+		e.message = "onscreen command: not yet implemented"
+		return false, nil
+	}
+	switch key.R {
+	case 'A':
+		e.autoIndent = !e.autoIndent
+	case 'C':
+		e.cmdCenterOrFlush(false)
+	case 'F':
+		e.cmdCenterOrFlush(true)
+	case 'D':
+		e.showHardCR = !e.showHardCR
+	case 'L':
+		return e.cmdSetMargin("Left margin: ", true)
+	case 'R':
+		return e.cmdSetMargin("Right margin: ", false)
+	case 'S':
+		e.doubleSpace = !e.doubleSpace
+	case 'T':
+		e.rulerOn = !e.rulerOn
+	case 'V':
+		e.variableTabsOn = !e.variableTabsOn
+	case 'I':
+		return e.cmdSetVariableTab()
+	case 'N':
+		return e.cmdClearVariableTab()
+	default:
+		e.message = "onscreen command: not yet implemented"
+	}
 	return false, nil
 }
 
@@ -638,11 +677,14 @@ func (e *Editor) deleteCharRight() (rune, bool) {
 	return c, ok
 }
 
-// insertRune is cmd_insert (rust/src/editor.rs:571), minus the word-wrap
-// check — margins/reformat are format-epic (2600) work. In overtype mode it
+// insertRune is cmd_insert (rust/src/editor.rs:571). In overtype mode it
 // first eats the rune under the cursor through the block-adjusted delete
 // (unless it's the line's terminating '\n', so overtype never eats past a
-// line's end), then always inserts.
+// line's end), then always inserts. The ASM only checks word wrap after an
+// ordinary printing char, not a space (wrapIfPastMargin's backward search
+// looks for a space, so checking right after typing one would just find
+// itself) or a tab (ASM zde17.asm:4094-4099) — cmdTab handles its own
+// wrapping-adjacent bookkeeping separately.
 func (e *Editor) insertRune(c rune) {
 	if e.insert == Overtype {
 		if ch, ok := e.buf.CharAt(e.buf.Cursor()); ok && ch != '\n' {
@@ -652,6 +694,9 @@ func (e *Editor) insertRune(c rune) {
 	e.insertChar(c)
 	e.modified = true
 	e.targetCol = nil
+	if c != ' ' && c != '\t' {
+		e.wrapIfPastMargin()
+	}
 }
 
 // insertNewline is cmd_cr (rust/src/editor.rs:592): opens a new line.
@@ -691,6 +736,223 @@ func (e *Editor) leadingWhitespace(offset int) string {
 		sb.WriteRune(c)
 	}
 	return sb.String()
+}
+
+// wrapIfPastMargin wraps the current word to a new line if it just pushed
+// past the right margin (ASM WdWrap, zde17.asm:5419 / rust
+// wrap_if_past_margin, rust/src/editor.rs:617). The word is already in the
+// buffer (the caller just inserted its last char); wrapping only needs to
+// swap the space before it for a line break, then apply the left margin.
+// Only insertRune calls this, and only after an ordinary printing char —
+// not a space (the backward search below looks for a space, so checking
+// right after typing one would just find itself) or a tab (ASM
+// zde17.asm:4094-4099).
+func (e *Editor) wrapIfPastMargin() {
+	col := e.buf.ColumnOf(e.buf.Cursor(), e.tabWidth()) + 1
+	if format.CheckRightMargin(col, e.cfg.RightMargin) != format.WrapWord {
+		return
+	}
+	cursor := e.buf.Cursor()
+	lineStart := e.buf.LineStart(cursor)
+	prefix := e.runesBetween(lineStart, cursor)
+	breakAt, ok := format.FindWrapPoint(prefix)
+	if !ok {
+		return
+	}
+	e.buf.MoveTo(lineStart + breakAt)
+	e.deleteCharRight() // the space the word was wrapping at
+	e.insertChar('\n')
+	inserted := e.applyLeftMargin()
+	e.buf.MoveTo(cursor + inserted)
+	e.modified = true
+}
+
+// applyLeftMargin inserts spaces to bring the cursor's line up to
+// Config.LeftMargin (ASM DoLM, zde17.asm:5330 / rust apply_left_margin,
+// rust/src/editor.rs:637), returning how many were inserted so callers can
+// adjust a saved cursor offset.
+func (e *Editor) applyLeftMargin() int {
+	n := e.cfg.LeftMargin - 1
+	for i := 0; i < n; i++ {
+		e.insertChar(' ')
+	}
+	return n
+}
+
+// runesBetween collects the buffer's runes in the logical range [from, to)
+// into a slice, the small helper wrapIfPastMargin/cmdReform/
+// cmdCenterOrFlush all use to hand a plain []rune/string to the pure
+// format package functions.
+func (e *Editor) runesBetween(from, to int) []rune {
+	rs := make([]rune, 0, to-from)
+	for i := from; i < to; i++ {
+		if c, ok := e.buf.CharAt(i); ok {
+			rs = append(rs, c)
+		}
+	}
+	return rs
+}
+
+// cmdReform is ^B — reflow the cursor's paragraph to the current margins
+// (ASM Reform, zde17.asm:5477 / rust cmd_reform, rust/src/editor.rs:650). A
+// no-op with a message when the right margin is off, same as the ASM.
+func (e *Editor) cmdReform() {
+	if e.cfg.RightMargin <= 1 {
+		e.message = "reform paragraph: no right margin set"
+		return
+	}
+	start, end := e.paragraphBounds(e.buf.Cursor())
+	original := string(e.runesBetween(start, end))
+	reflowed := format.ReflowParagraph(original, e.cfg.LeftMargin, e.cfg.RightMargin)
+	e.buf.MoveTo(start)
+	for i := start; i < end; i++ {
+		e.deleteCharRight()
+	}
+	for _, c := range reflowed {
+		e.insertChar(c)
+	}
+	e.modified = true
+}
+
+// paragraphBounds is the span [start, end) of the paragraph containing
+// offset: the widest run of non-blank lines around it, stopping at a blank
+// line or the ends of the document (ASM former-margin handling,
+// zde17.asm:5338 / rust paragraph_bounds, rust/src/editor.rs:675). end lands
+// on the last line's own terminating '\n' (or end-of-document), so that
+// hard CR is never touched by the reflow that replaces [start, end).
+func (e *Editor) paragraphBounds(offset int) (start, end int) {
+	start = e.buf.LineStart(offset)
+	for start > 0 {
+		prevStart := e.lineStartNBack(start, 1)
+		if e.buf.LineEnd(prevStart) == prevStart {
+			break // the line above is blank: stop here
+		}
+		start = prevStart
+	}
+	end = e.buf.LineEnd(offset)
+	for {
+		nextStart := end + 1
+		if nextStart > e.buf.Len() || e.buf.LineEnd(nextStart) == nextStart {
+			break
+		}
+		end = e.buf.LineEnd(nextStart)
+	}
+	return start, end
+}
+
+// cmdCenterOrFlush is ^OC/^OF — center or flush-right the cursor's line
+// between the margins (ASM Center, zde17.asm:5691 / rust
+// cmd_center_or_flush, rust/src/editor.rs:694). A no-op with a message when
+// the right margin is off, same as the ASM.
+func (e *Editor) cmdCenterOrFlush(flushRight bool) {
+	if e.cfg.RightMargin <= 1 {
+		e.message = "center/flush line: no right margin set"
+		return
+	}
+	start := e.buf.LineStart(e.buf.Cursor())
+	end := e.buf.LineEnd(e.buf.Cursor())
+	text := string(e.runesBetween(start, end))
+	centered := format.CenterLine(text, e.cfg.LeftMargin, e.cfg.RightMargin, flushRight)
+	e.buf.MoveTo(start)
+	for i := start; i < end; i++ {
+		e.deleteCharRight()
+	}
+	for _, c := range centered {
+		e.insertChar(c)
+	}
+	e.modified = true
+}
+
+// cmdTab is ^I — a hard tab, or (when variableTabsOn) space over to the
+// next configured variable tab stop instead of inserting a literal tab byte
+// (ASM TabKey/VarTab, zde17.asm:4101,3871 / rust cmd_tab,
+// rust/src/editor.rs:766). A stop past every configured column is a no-op,
+// matching the ASM's "none, no action".
+func (e *Editor) cmdTab() {
+	if !e.variableTabsOn {
+		e.insertRune('\t')
+		return
+	}
+	col := e.buf.ColumnOf(e.buf.Cursor(), e.tabWidth())
+	target, ok := format.NextVariableTabStop(col, e.cfg.VariableTabs)
+	if !ok {
+		return
+	}
+	for i := col; i < target; i++ {
+		e.insertChar(' ')
+	}
+	e.modified = true
+	e.targetCol = nil
+}
+
+// cmdSetMargin is ^OL/^OR — prompt for and set the left or right margin
+// column (ASM parts of the OMnuSt table / rust cmd_set_margin,
+// rust/src/editor.rs:734).
+func (e *Editor) cmdSetMargin(prompt string, isLeft bool) (bool, error) {
+	input, ok, err := e.promptLine(prompt)
+	if err != nil || !ok {
+		return false, err
+	}
+	col, err := strconv.Atoi(strings.TrimSpace(input))
+	if err != nil {
+		e.message = "not a column number: " + input
+		return false, nil
+	}
+	if isLeft {
+		e.cfg.LeftMargin = col
+	} else {
+		e.cfg.RightMargin = col
+	}
+	return false, nil
+}
+
+// parseColumnOrHere parses a column-number prompt answer, defaulting to the
+// cursor's current column when the input is empty (ASM "default is Here"
+// convention, VTSet/VTClr zde17.asm:3930,4015 / rust parse_column_or_here,
+// rust/src/editor.rs:806).
+func (e *Editor) parseColumnOrHere(input string) (int, bool) {
+	trimmed := strings.TrimSpace(input)
+	if trimmed == "" {
+		return e.curCol, true
+	}
+	col, err := strconv.Atoi(trimmed)
+	return col, err == nil
+}
+
+// cmdSetVariableTab is ^OI — add a variable tab stop (ASM VTSet,
+// zde17.asm:3926 / rust cmd_set_variable_tab, rust/src/editor.rs:817),
+// simplified to the single-column form: the ASM's @n (evenly spaced) and #
+// (explicit group) shorthand aren't ported.
+func (e *Editor) cmdSetVariableTab() (bool, error) {
+	input, ok, err := e.promptLine("Set tab at column: ")
+	if err != nil || !ok {
+		return false, err
+	}
+	col, parsed := e.parseColumnOrHere(input)
+	switch {
+	case !parsed:
+		e.message = "not a column number: " + input
+	case !format.InsertTabStop(&e.cfg.VariableTabs, col):
+		e.message = "can't set a tab stop at column " + strconv.Itoa(col)
+	}
+	return false, nil
+}
+
+// cmdClearVariableTab is ^ON — remove a variable tab stop (ASM VTClr,
+// zde17.asm:4013 / rust cmd_clear_variable_tab, rust/src/editor.rs:830).
+func (e *Editor) cmdClearVariableTab() (bool, error) {
+	input, ok, err := e.promptLine("Clear tab at column: ")
+	if err != nil || !ok {
+		return false, err
+	}
+	col, parsed := e.parseColumnOrHere(input)
+	switch {
+	case !parsed:
+		e.message = "not a column number: " + input
+	case !format.RemoveTabStop(&e.cfg.VariableTabs, col):
+		e.message = "no tab stop at column " + strconv.Itoa(col)
+	}
+	return false, nil
 }
 
 // deleteLeft is cmd_delete_left (Backspace/DEL, ASM Delete zde17.asm:4283 /

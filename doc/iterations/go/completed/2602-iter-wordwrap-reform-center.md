@@ -1,12 +1,12 @@
-# 0602 — Word wrap, reflow & center
+# 2602 — Word wrap, reflow & center
 
-Epic: [[doc/iterations/go/2600-EPIC-go-formatting]]
-Status: ready
+Epic: [[doc/iterations/go/x2600-EPIC-go-formatting]]
+Status: done
 
 ## Progress
-- ⬜ design
-- ⬜ implement
-- ⬜ test
+- ✅ design
+- ✅ implement
+- ✅ test
 
 ## Goal
 
@@ -29,7 +29,7 @@ reformatter behavior minus soft-space compression and hyphenation.
   multi-line paragraph to a given margin; centering; idempotent reflow.
 
 ## Depends on
-- [[doc/iterations/go/2601-iter-tabs-margins-columns]].
+- [[doc/iterations/go/completed/2601-iter-tabs-margins-columns]].
 
 ## References
 - `rust/src/format.rs`. ASM reformatter `zde17.asm:2129` (`Cmprs`).

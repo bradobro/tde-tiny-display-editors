@@ -2,12 +2,20 @@
 // display columns, hard and variable tab stops, word wrap, paragraph reflow,
 // and centering. Ports the ASM reformatter arithmetic (Cmprs/reformat region,
 // zde17.asm:2129 onward) minus the soft-space compression (ADR 0002) and minus
-// hyphenation/proportional spacing (dropped for v1, ADR 0004).
+// hyphenation/proportional spacing (dropped for v1, ADR 0004). Also ports
+// rust/src/format.rs, which already carried the same functions over from the
+// ASM once before.
 //
-// Everything here is a pure function on runes and ints so it is unit-testable
-// without a terminal; the editor-side command wiring (^B reflow, ^OC center)
-// lands in epic 0600. This file is the M0 scaffold.
+// Everything here is a pure function on runes/strings and ints so it is
+// unit-testable without a terminal; the editor-side command wiring (^B
+// reflow, ^OC center, ^I tab, ^O margin/tab-stop toggles) lives in
+// internal/editor/editor.go (epic 2600).
 package format
+
+import (
+	"strings"
+	"unicode/utf8"
+)
 
 // NextVariableTabStop returns the first configured tab column strictly greater
 // than the 0-based `col`, scanning the VTList-style stop table (0 terminates

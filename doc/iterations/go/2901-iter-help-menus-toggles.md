@@ -27,7 +27,7 @@ user-facing command surface.
   and ruler render asserted as framebuffer bytes.
 
 ## Depends on
-- [[doc/iterations/go/2600-EPIC-go-formatting]],
+- [[doc/iterations/go/x2600-EPIC-go-formatting]],
   [[doc/iterations/go/x2300-EPIC-go-screen-loop]].
 
 ## References

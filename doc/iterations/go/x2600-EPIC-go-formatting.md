@@ -1,6 +1,6 @@
 # Epic 2600 — Formatting (Go)
 
-Status: ready
+Status: done
 
 ## Goal
 
@@ -19,8 +19,8 @@ reformatter arithmetic minus soft-space compression and minus hyphenation.
 
 ## Iterations
 
-- [[doc/iterations/go/2601-iter-tabs-margins-columns]]
-- [[doc/iterations/go/2602-iter-wordwrap-reform-center]]
+- [[doc/iterations/go/completed/2601-iter-tabs-margins-columns]]
+- [[doc/iterations/go/completed/2602-iter-wordwrap-reform-center]]
 
 ## Exit criteria
 

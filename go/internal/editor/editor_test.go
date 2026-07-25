@@ -814,3 +814,161 @@ func runeKeys(s string) []keyboard.Key {
 	}
 	return keys
 }
+
+// TestTypingPastRightMarginWrapsTheLastWord drives insertRune's on-type
+// word-wrap check (wrapIfPastMargin, epic 2600, ports rust
+// wrap_if_past_margin, rust/src/editor.rs:617): typing "hello world" with a
+// right margin of 10 should push "world" onto its own line once the 'd'
+// pushes the line past the margin.
+func TestTypingPastRightMarginWrapsTheLastWord(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.RightMargin = 10
+	scr := screen.NewFakeScreen(24, 80)
+	e := New(cfg, scr, keyboard.NewScriptedKeys(), "", "")
+
+	for _, r := range "hello world" {
+		e.dispatchChar(r)
+	}
+
+	if got, want := e.buf.String(), "hello\nworld"; got != want {
+		t.Errorf("buffer = %q, want %q", got, want)
+	}
+}
+
+// TestCtrlBReflowsTheCursorsParagraph drives ^B end to end through
+// dispatchCtrl (cmdReform, ports rust cmd_reform, rust/src/editor.rs:650).
+func TestCtrlBReflowsTheCursorsParagraph(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.RightMargin = 15
+	cfg.LeftMargin = 1
+	text := "the quick brown fox jumps over the lazy dog"
+	scr := screen.NewFakeScreen(24, 80)
+	e := New(cfg, scr, keyboard.NewScriptedKeys(), "", text)
+
+	if _, err := e.dispatchCtrl('B'); err != nil {
+		t.Fatalf("dispatchCtrl('B') err = %v", err)
+	}
+
+	want := "the quick brown\nfox jumps over\nthe lazy dog"
+	if got := e.buf.String(); got != want {
+		t.Errorf("buffer = %q, want %q", got, want)
+	}
+	if !e.modified {
+		t.Error("modified = false, want true after reform")
+	}
+}
+
+// TestCtrlBReformNoopsWhenRightMarginIsOff mirrors the ASM's RET Z guard:
+// reform must leave the text untouched (and say why) when there's no right
+// margin configured.
+func TestCtrlBReformNoopsWhenRightMarginIsOff(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.RightMargin = 1
+	scr := screen.NewFakeScreen(24, 80)
+	e := New(cfg, scr, keyboard.NewScriptedKeys(), "", "hello world")
+
+	if _, err := e.dispatchCtrl('B'); err != nil {
+		t.Fatalf("dispatchCtrl('B') err = %v", err)
+	}
+	if got, want := e.buf.String(), "hello world"; got != want {
+		t.Errorf("buffer = %q, want unchanged %q", got, want)
+	}
+	if e.message == "" {
+		t.Error("message = \"\", want an explanation")
+	}
+}
+
+// TestCtrlOCCentersTheCursorsLine drives ^O C through dispatchOnScreen
+// (cmdCenterOrFlush, ports rust cmd_center_or_flush, rust/src/editor.rs:694).
+func TestCtrlOCCentersTheCursorsLine(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.LeftMargin = 1
+	cfg.RightMargin = 11
+	scr := screen.NewFakeScreen(24, 80)
+	e := New(cfg, scr, keyboard.NewScriptedKeys(), "", "hi")
+
+	if _, err := e.dispatchOnScreen(ctrlKey('C')); err != nil {
+		t.Fatalf("dispatchOnScreen('C') err = %v", err)
+	}
+
+	if got, want := e.buf.String(), "    hi"; got != want {
+		t.Errorf("buffer = %q, want %q", got, want)
+	}
+}
+
+// TestCtrlOLSetsLeftMarginViaPrompt drives ^O L's promptLine flow (
+// cmdSetMargin, ports rust cmd_set_margin, rust/src/editor.rs:734).
+func TestCtrlOLSetsLeftMarginViaPrompt(t *testing.T) {
+	scr := screen.NewFakeScreen(24, 80)
+	keys := keyboard.NewScriptedKeys(charKey('5'), charKey('\r'))
+	e := New(config.DefaultConfig(), scr, keys, "", "")
+
+	if _, err := e.dispatchOnScreen(ctrlKey('L')); err != nil {
+		t.Fatalf("dispatchOnScreen('L') err = %v", err)
+	}
+	if e.cfg.LeftMargin != 5 {
+		t.Errorf("LeftMargin = %d, want 5", e.cfg.LeftMargin)
+	}
+}
+
+// TestCtrlOVThenCtrlIAdvancesToTheNextVariableTabStop drives ^O V (toggle
+// variable-tab mode) then a bare ^I (cmdTab, ports rust cmd_tab,
+// rust/src/editor.rs:766) with the default variable-tab stops (6, 11, 16,
+// 21): from column 0 it should pad with spaces to column 6.
+func TestCtrlOVThenCtrlIAdvancesToTheNextVariableTabStop(t *testing.T) {
+	scr := screen.NewFakeScreen(24, 80)
+	e := New(config.DefaultConfig(), scr, keyboard.NewScriptedKeys(), "", "")
+
+	if _, err := e.dispatchOnScreen(ctrlKey('V')); err != nil {
+		t.Fatalf("dispatchOnScreen('V') err = %v", err)
+	}
+	if !e.variableTabsOn {
+		t.Fatal("variableTabsOn = false after ^O V, want true")
+	}
+	if _, err := e.dispatchCtrl('I'); err != nil {
+		t.Fatalf("dispatchCtrl('I') err = %v", err)
+	}
+
+	if got, want := e.buf.String(), "      "; got != want {
+		t.Errorf("buffer = %q, want %d spaces", got, len(want))
+	}
+}
+
+// TestCtrlOIThenCtrlOSetsAndClearsAVariableTabStop drives ^O I (set) then
+// ^O N (clear) through their promptLine flows (cmdSetVariableTab/
+// cmdClearVariableTab, ports rust cmd_set_variable_tab/
+// cmd_clear_variable_tab, rust/src/editor.rs:817,830).
+func TestCtrlOIThenCtrlOSetsAndClearsAVariableTabStop(t *testing.T) {
+	scr := screen.NewFakeScreen(24, 80)
+	keys := keyboard.NewScriptedKeys(
+		charKey('9'), charKey('\r'), // ^O I: set tab at column 9
+		charKey('9'), charKey('\r'), // ^O N: clear tab at column 9
+	)
+	e := New(config.DefaultConfig(), scr, keys, "", "")
+
+	if _, err := e.dispatchOnScreen(ctrlKey('I')); err != nil {
+		t.Fatalf("dispatchOnScreen('I') err = %v", err)
+	}
+	if stop, ok := lastVariableTabStop(e); !ok || stop != 9 {
+		t.Fatalf("after set: stops = %v, want 9 present", e.cfg.VariableTabs)
+	}
+
+	if _, err := e.dispatchOnScreen(ctrlKey('N')); err != nil {
+		t.Fatalf("dispatchOnScreen('N') err = %v", err)
+	}
+	if _, ok := lastVariableTabStop(e); ok {
+		t.Errorf("after clear: stops = %v, want 9 removed", e.cfg.VariableTabs)
+	}
+}
+
+// lastVariableTabStop reports whether 9 is configured in e's variable-tab
+// list, and returns it — a small helper so the set/clear test above reads
+// as plain assertions instead of a hand-rolled scan each time.
+func lastVariableTabStop(e *Editor) (int, bool) {
+	for _, stop := range e.cfg.VariableTabs {
+		if stop == 9 {
+			return stop, true
+		}
+	}
+	return 0, false
+}
