@@ -213,7 +213,13 @@ impl Editor {
     /// Redraw the whole frame: header, optional ruler, text area, status
     /// message, then position the terminal cursor. Always a full redraw —
     /// see the `RedrawHint` doc comment on why that's fine for now.
+    ///
+    /// The terminal cursor is hidden for the span of the repaint and shown
+    /// again only once it's been moved to the caret, so it never flickers
+    /// through the header/text/message writes mid-frame (ported from the
+    /// Zig port's design, `[[doc/adr/0007-zig-raw-ansi-backend]]` §4).
     fn redraw(&mut self, screen: &mut dyn Screen) -> io::Result<()> {
+        screen.show_cursor(false)?;
         screen.move_to(0, 0)?;
         screen.clear_line()?;
         screen.write_str(&screen::render_header(&self.header_info()))?;
@@ -225,6 +231,7 @@ impl Editor {
         self.draw_text_area(screen, row)?;
         self.draw_message(screen, row)?;
         self.place_cursor(screen, row)?;
+        screen.show_cursor(true)?;
         screen.flush()
     }
 
@@ -1151,6 +1158,12 @@ impl Editor {
         let rows = self.cfg.screen_lines as usize;
         let cols = screen::grid_cols(names, self.cfg.view_columns as usize);
         let mut selected = 0usize;
+        // The grid overlays the text area and marks its selection with `>`
+        // (no live cursor here — see the 1002 iteration notes), so hide the
+        // real terminal cursor rather than leave it sitting at a stale
+        // document position underneath the picker. The next full `redraw`
+        // after this returns puts it back.
+        screen.show_cursor(false)?;
         loop {
             self.draw_directory_page(screen, names, selected, rows)?;
             match keys.next_key()? {
@@ -1523,6 +1536,9 @@ mod tests {
             Ok(())
         }
         fn move_to(&mut self, _row: u16, _col: u16) -> io::Result<()> {
+            Ok(())
+        }
+        fn show_cursor(&mut self, _visible: bool) -> io::Result<()> {
             Ok(())
         }
         fn write_str(&mut self, s: &str) -> io::Result<()> {
