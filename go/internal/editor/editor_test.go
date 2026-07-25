@@ -972,3 +972,123 @@ func lastVariableTabStop(e *Editor) (int, bool) {
 	}
 	return 0, false
 }
+
+// TestCtrlQFFindMovesTheCursorToTheNextMatch drives ^Q F through
+// dispatchQuick (cmdFind, ports rust find_moves_the_cursor_to_the_next_match,
+// rust/src/editor.rs:1820).
+func TestCtrlQFFindMovesTheCursorToTheNextMatch(t *testing.T) {
+	scr := screen.NewFakeScreen(24, 80)
+	keys := keyboard.NewScriptedKeys(append(runeKeys("brown"), charKey('\r'))...)
+	e := New(config.DefaultConfig(), scr, keys, "", "the quick brown fox")
+
+	if _, err := e.dispatchQuick(ctrlKey('F')); err != nil {
+		t.Fatalf("dispatchQuick('F') err = %v", err)
+	}
+	if got, want := e.buf.Cursor(), 10; got != want {
+		t.Errorf("cursor = %d, want %d", got, want)
+	}
+	if e.message != "found" {
+		t.Errorf("message = %q, want %q", e.message, "found")
+	}
+}
+
+// TestCtrlQFFindReportsNotFoundAndLeavesTheCursor mirrors rust
+// find_reports_not_found_and_leaves_the_cursor, rust/src/editor.rs:1829.
+func TestCtrlQFFindReportsNotFoundAndLeavesTheCursor(t *testing.T) {
+	scr := screen.NewFakeScreen(24, 80)
+	keys := keyboard.NewScriptedKeys(append(runeKeys("xyz"), charKey('\r'))...)
+	e := New(config.DefaultConfig(), scr, keys, "", "the quick brown fox")
+	e.buf.MoveTo(3)
+
+	if _, err := e.dispatchQuick(ctrlKey('F')); err != nil {
+		t.Fatalf("dispatchQuick('F') err = %v", err)
+	}
+	if got, want := e.buf.Cursor(), 3; got != want {
+		t.Errorf("cursor = %d, want unchanged %d", got, want)
+	}
+	if e.message != "not found" {
+		t.Errorf("message = %q, want %q", e.message, "not found")
+	}
+}
+
+// TestCtrlLRepeatFindFindsTheNextOccurrencePastTheLastMatch mirrors rust
+// repeat_find_finds_the_next_occurrence_past_the_last_match,
+// rust/src/editor.rs:1838.
+func TestCtrlLRepeatFindFindsTheNextOccurrencePastTheLastMatch(t *testing.T) {
+	scr := screen.NewFakeScreen(24, 80)
+	keys := keyboard.NewScriptedKeys(append(runeKeys("aa"), charKey('\r'))...)
+	e := New(config.DefaultConfig(), scr, keys, "", "aa aa aa")
+
+	if _, err := e.dispatchQuick(ctrlKey('F')); err != nil {
+		t.Fatalf("dispatchQuick('F') err = %v", err)
+	}
+	if got, want := e.buf.Cursor(), 3; got != want {
+		t.Fatalf("cursor = %d, want %d", got, want)
+	}
+
+	if _, err := e.dispatchCtrl('L'); err != nil {
+		t.Fatalf("dispatchCtrl('L') err = %v", err)
+	}
+	if got, want := e.buf.Cursor(), 6; got != want {
+		t.Errorf("cursor = %d, want %d", got, want)
+	}
+}
+
+// TestCtrlLRepeatFindIsANoopWithNoPreviousQuery mirrors rust
+// repeat_find_is_a_no_op_with_no_previous_query, rust/src/editor.rs:1853.
+func TestCtrlLRepeatFindIsANoopWithNoPreviousQuery(t *testing.T) {
+	scr := screen.NewFakeScreen(24, 80)
+	e := New(config.DefaultConfig(), scr, keyboard.NewScriptedKeys(), "", "abc")
+
+	if _, err := e.dispatchCtrl('L'); err != nil {
+		t.Fatalf("dispatchCtrl('L') err = %v", err)
+	}
+	if !strings.Contains(e.message, "no previous find") {
+		t.Errorf("message = %q, want it to mention no previous find", e.message)
+	}
+}
+
+// TestCtrlQAReplaceConfirmsEachMatchAndOnlyChangesAcceptedOnes mirrors rust
+// replace_confirms_each_match_and_only_changes_accepted_ones,
+// rust/src/editor.rs:1862.
+func TestCtrlQAReplaceConfirmsEachMatchAndOnlyChangesAcceptedOnes(t *testing.T) {
+	scr := screen.NewFakeScreen(24, 80)
+	script := append(runeKeys("cat"), charKey('\r'))
+	script = append(script, runeKeys("dog")...)
+	script = append(script, charKey('\r'), charKey('n'), charKey('y'), charKey('n'))
+	keys := keyboard.NewScriptedKeys(script...)
+	e := New(config.DefaultConfig(), scr, keys, "", "cat cat cat")
+
+	if _, err := e.dispatchQuick(ctrlKey('A')); err != nil {
+		t.Fatalf("dispatchQuick('A') err = %v", err)
+	}
+	if got, want := e.buf.String(), "cat dog cat"; got != want {
+		t.Errorf("buffer = %q, want %q", got, want)
+	}
+	if !strings.Contains(e.message, "1 replaced") {
+		t.Errorf("message = %q, want it to mention 1 replaced", e.message)
+	}
+}
+
+// TestGlobalReplaceChangesEveryMatchWithoutPrompting mirrors rust
+// global_replace_changes_every_match_without_prompting,
+// rust/src/editor.rs:1876.
+func TestGlobalReplaceChangesEveryMatchWithoutPrompting(t *testing.T) {
+	scr := screen.NewFakeScreen(24, 80)
+	script := append(runeKeys("cat"), charKey('\r'))
+	script = append(script, runeKeys("dog")...)
+	script = append(script, charKey('\r'))
+	keys := keyboard.NewScriptedKeys(script...)
+	e := New(config.DefaultConfig(), scr, keys, "", "cat cat cat")
+	e.ensureQuery().Global = true
+
+	if _, err := e.dispatchQuick(ctrlKey('A')); err != nil {
+		t.Fatalf("dispatchQuick('A') err = %v", err)
+	}
+	if got, want := e.buf.String(), "dog dog dog"; got != want {
+		t.Errorf("buffer = %q, want %q", got, want)
+	}
+	if !strings.Contains(e.message, "3 replaced") {
+		t.Errorf("message = %q, want it to mention 3 replaced", e.message)
+	}
+}

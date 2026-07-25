@@ -1,6 +1,6 @@
 # Epic 2700 — Search & Replace (Go)
 
-Status: ready
+Status: done
 
 ## Goal
 
@@ -16,7 +16,7 @@ Find, replace, and repeat — the `^QF`/`^QA`/`^L` commands over the already-don
 
 ## Iterations
 
-- [[doc/iterations/go/2701-iter-find-replace]]
+- [[doc/iterations/go/completed/2701-iter-find-replace]]
 
 ## Exit criteria
 

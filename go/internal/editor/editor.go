@@ -255,11 +255,11 @@ func (e *Editor) dispatchChar(r rune) {
 
 // dispatchCtrl handles a bare control chord from the main table (MnuSt,
 // zde17.asm:403 / rust Editor::dispatch, rust/src/editor.rs:294). The prefix
-// keys, ^V (toggle insert), ^B reform and ^I tab (epic 2600), and this
-// epic's edit/movement commands are wired for real; every other bare
-// control key (^T delete-word, ^W/^Z single-line scroll, help, search/
-// replace synonyms, ...) is out of scope here and lands with search/help in
-// later epics.
+// keys, ^V (toggle insert), ^B reform and ^I tab (epic 2600), ^L/^\ repeat-
+// find (epic 2700), and this epic's edit/movement commands are wired for
+// real; every other bare control key (^T delete-word, ^W/^Z single-line
+// scroll, help, ...) is out of scope here and lands with help in a later
+// epic.
 // Note ^S/^D/^E/^X are deliberately NOT bound to movement here: neither the
 // ASM's MnuSt table nor rust/src/editor.rs::dispatch binds those letters —
 // movement by char/line at the bare-key level is arrow-keys-only, and S/D/
@@ -292,6 +292,8 @@ func (e *Editor) dispatchCtrl(letter rune) (bool, error) {
 		e.cmdReform()
 	case 'I':
 		e.cmdTab()
+	case 'L', '\\':
+		return e.cmdRepeatFind()
 	default:
 		e.message = "not yet implemented"
 	}
@@ -564,12 +566,11 @@ func (e *Editor) markBlockEnd() {
 }
 
 // dispatchQuick is the ^Q quick-movement/find table (QMnuSt, zde17.asm:632 /
-// rust dispatch_quick, rust/src/editor.rs:491). This epic wires the corner
-// of the table it owns — line start/end (^QS/^QD) and document top/bottom
-// (^QR/^QC); find/replace/repeat-find and the rest of the table (^Q^U
-// undelete duplicates the bare ^U already on the main table, ^Q^Y/^Q DEL
-// erase-eol/erase-bol, the ^Q-arrow screen-top/bottom synonyms) stay
-// unimplemented until search (epic 2700) lands.
+// rust dispatch_quick, rust/src/editor.rs:491). Line start/end (^QS/^QD),
+// document top/bottom (^QR/^QC), find (^QF) and replace (^QA) are wired;
+// the rest of the table (^Q^U undelete duplicates the bare ^U already on
+// the main table, ^Q^Y/^Q DEL erase-eol/erase-bol, the ^Q-arrow screen-top/
+// bottom synonyms) is out of scope for this epic.
 func (e *Editor) dispatchQuick(key keyboard.Key) (bool, error) {
 	if key.Kind == keyboard.KCtrl {
 		switch key.R {
@@ -585,6 +586,10 @@ func (e *Editor) dispatchQuick(key keyboard.Key) (bool, error) {
 		case 'C':
 			e.documentBottom()
 			return false, nil
+		case 'F':
+			return e.cmdFind()
+		case 'A':
+			return e.cmdReplace()
 		}
 	}
 	e.message = "quick command: not yet implemented"
@@ -952,6 +957,137 @@ func (e *Editor) cmdClearVariableTab() (bool, error) {
 	case !format.RemoveTabStop(&e.cfg.VariableTabs, col):
 		e.message = "no tab stop at column " + strconv.Itoa(col)
 	}
+	return false, nil
+}
+
+// ensureQuery returns e.query, lazily allocating an empty one on the first
+// find/replace of the session. Editor.query is a pointer (nil until used)
+// rather than a value, since Go has no Default trait to derive a zero
+// search.Query the way rust/src/editor.rs's Editor::new does.
+func (e *Editor) ensureQuery() *search.Query {
+	if e.query == nil {
+		e.query = &search.Query{}
+	}
+	return e.query
+}
+
+// cmdFind is ^QF — prompt for a search string and run a plain find (ASM
+// Find, zde17.asm:3353 / rust cmd_find, rust/src/editor.rs:922). An empty
+// or cancelled prompt leaves the query and cursor untouched.
+func (e *Editor) cmdFind() (bool, error) {
+	input, ok, err := e.promptLine("Find: ")
+	if err != nil || !ok || input == "" {
+		return false, err
+	}
+	q := e.ensureQuery()
+	q.Find = []rune(input)
+	q.Replace = nil
+	e.runFind()
+	return false, nil
+}
+
+// runFind runs e.query as a plain find from the cursor, moving the cursor to
+// the match or setting message to "not found" (ports Editor::run_find,
+// rust/src/editor.rs:935). Forward search starts just past the cursor and
+// backward search starts just before it, so repeat-find (^L) never
+// re-matches the position it's already sitting on.
+func (e *Editor) runFind() {
+	cursor := e.buf.Cursor()
+	from := cursor
+	if !e.query.Backward {
+		from = cursor + 1
+	}
+	if pos, found := search.FindFrom(e.buf, from, e.query); found {
+		e.buf.MoveTo(pos)
+		e.targetCol = nil
+		e.message = "found"
+	} else {
+		e.message = "not found"
+	}
+}
+
+// cmdReplace is ^QA — prompt for a search string and its replacement, then
+// run the replace (ASM Rplace, zde17.asm:3737 / rust cmd_replace,
+// rust/src/editor.rs:958).
+func (e *Editor) cmdReplace() (bool, error) {
+	find, ok, err := e.promptLine("Find: ")
+	if err != nil || !ok || find == "" {
+		return false, err
+	}
+	replace, ok, err := e.promptLine("Replace with: ")
+	if err != nil || !ok {
+		return false, err
+	}
+	q := e.ensureQuery()
+	q.Find = []rune(find)
+	q.Replace = []rune(replace)
+	return e.runReplace()
+}
+
+// runReplace replaces every match of e.query.Find from the cursor (or, when
+// e.query.Global, from the start of the buffer) through the end of the
+// document — replacing each without prompting if Global, otherwise
+// confirming each match first (ASM RplLp/YesNo, zde17.asm:3765,3800 / rust
+// run_replace, rust/src/editor.rs:1001). Simplification carried over from
+// the Rust port: this port's confirm only distinguishes Y from N/Esc,
+// unlike the ASM's four-way Y/N/Esc-abort/*-replace-all-remaining prompt;
+// Global, once set, is this port's equivalent of the ASM's "switch to
+// global" escape hatch.
+func (e *Editor) runReplace() (bool, error) {
+	from := e.buf.Cursor()
+	if e.query.Global {
+		from = 0
+	}
+	matchedLen := len(e.query.Find)
+	count := 0
+	for {
+		pos, found := search.FindFrom(e.buf, from, e.query)
+		if !found {
+			break
+		}
+		e.buf.MoveTo(pos)
+		e.targetCol = nil
+		doReplace := e.query.Global
+		if !doReplace {
+			ok, err := e.confirm("Replace? (Y/N): ")
+			if err != nil {
+				return false, err
+			}
+			doReplace = ok
+		}
+		if doReplace {
+			for i := 0; i < matchedLen; i++ {
+				e.deleteCharRight()
+			}
+			for _, c := range e.query.Replace {
+				e.insertChar(c)
+			}
+			count++
+			from = pos + len(e.query.Replace)
+		} else {
+			from = pos + max(matchedLen, 1)
+		}
+	}
+	if count > 0 {
+		e.modified = true
+	}
+	e.message = strconv.Itoa(count) + " replaced"
+	return false, nil
+}
+
+// cmdRepeatFind is ^L/^\ — repeat the last find or replace (ASM Repeat,
+// zde17.asm:3776 / rust cmd_repeat_find, rust/src/editor.rs:978). Re-runs a
+// replace if the last operation was one (query.Replace != nil), otherwise
+// repeats the plain find.
+func (e *Editor) cmdRepeatFind() (bool, error) {
+	if e.query == nil || len(e.query.Find) == 0 {
+		e.message = "no previous find"
+		return false, nil
+	}
+	if e.query.Replace != nil {
+		return e.runReplace()
+	}
+	e.runFind()
 	return false, nil
 }
 
