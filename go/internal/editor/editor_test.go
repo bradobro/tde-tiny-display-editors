@@ -973,6 +973,214 @@ func lastVariableTabStop(e *Editor) (int, bool) {
 	return 0, false
 }
 
+// TestMarkCopyMovesTheCursorPastTheInsertedCopy mirrors rust
+// mark_copy_moves_the_cursor_past_the_inserted_copy, rust/src/editor.rs:1918.
+func TestMarkCopyMovesTheCursorPastTheInsertedCopy(t *testing.T) {
+	scr := screen.NewFakeScreen(24, 80)
+	e := New(config.DefaultConfig(), scr, keyboard.NewScriptedKeys(), "", "abc def")
+
+	e.markBlockStart()
+	e.buf.MoveTo(3)
+	e.markBlockEnd()
+	if lo, hi, ok := e.blk.Span(); !ok || lo != 0 || hi != 3 {
+		t.Fatalf("span = (%d, %d, %v), want (0, 3, true)", lo, hi, ok)
+	}
+
+	e.buf.MoveTo(7)
+	e.cmdCopyBlock()
+	if got, want := e.buf.String(), "abc defabc"; got != want {
+		t.Errorf("buffer = %q, want %q", got, want)
+	}
+	if got, want := e.buf.Cursor(), 10; got != want {
+		t.Errorf("cursor = %d, want %d", got, want)
+	}
+	if lo, hi, ok := e.blk.Span(); !ok || lo != 0 || hi != 3 {
+		t.Errorf("span after copy = (%d, %d, %v), want unchanged (0, 3, true)", lo, hi, ok)
+	}
+}
+
+// TestCopyShiftsTheOriginalSpanWhenInsertingBeforeIt mirrors rust
+// copy_shifts_the_original_span_when_inserting_before_it,
+// rust/src/editor.rs:1932.
+func TestCopyShiftsTheOriginalSpanWhenInsertingBeforeIt(t *testing.T) {
+	scr := screen.NewFakeScreen(24, 80)
+	e := New(config.DefaultConfig(), scr, keyboard.NewScriptedKeys(), "", "abc def")
+	e.buf.MoveTo(4)
+
+	e.markBlockStart()
+	e.buf.MoveTo(7)
+	e.markBlockEnd()
+	if lo, hi, ok := e.blk.Span(); !ok || lo != 4 || hi != 7 {
+		t.Fatalf("span = (%d, %d, %v), want (4, 7, true)", lo, hi, ok)
+	}
+
+	e.buf.MoveTo(0)
+	e.cmdCopyBlock()
+	if got, want := e.buf.String(), "defabc def"; got != want {
+		t.Errorf("buffer = %q, want %q", got, want)
+	}
+	if lo, hi, ok := e.blk.Span(); !ok || lo != 7 || hi != 10 {
+		t.Errorf("span after copy = (%d, %d, %v), want (7, 10, true)", lo, hi, ok)
+	}
+}
+
+// TestCopyDeclinesWhenTheCursorIsInsideTheMarkedBlock mirrors rust
+// copy_declines_when_the_cursor_is_inside_the_marked_block,
+// rust/src/editor.rs:1947.
+func TestCopyDeclinesWhenTheCursorIsInsideTheMarkedBlock(t *testing.T) {
+	scr := screen.NewFakeScreen(24, 80)
+	e := New(config.DefaultConfig(), scr, keyboard.NewScriptedKeys(), "", "abcdef")
+
+	e.markBlockStart()
+	e.buf.MoveTo(6)
+	e.markBlockEnd()
+	e.buf.MoveTo(3)
+	e.cmdCopyBlock()
+
+	if got, want := e.buf.String(), "abcdef"; got != want {
+		t.Errorf("buffer = %q, want unchanged %q", got, want)
+	}
+	if !strings.Contains(e.message, "can't copy a block onto itself") {
+		t.Errorf("message = %q, want it to mention the straddle error", e.message)
+	}
+}
+
+// TestEraseBlockRemovesTheSpanAndUnmarks mirrors rust
+// erase_block_removes_the_span_and_unmarks, rust/src/editor.rs:1962.
+func TestEraseBlockRemovesTheSpanAndUnmarks(t *testing.T) {
+	scr := screen.NewFakeScreen(24, 80)
+	e := New(config.DefaultConfig(), scr, keyboard.NewScriptedKeys(), "", "abc def")
+
+	e.markBlockStart()
+	e.buf.MoveTo(4)
+	e.markBlockEnd()
+	e.cmdEraseBlock()
+
+	if got, want := e.buf.String(), "def"; got != want {
+		t.Errorf("buffer = %q, want %q", got, want)
+	}
+	if _, _, ok := e.blk.Span(); ok {
+		t.Error("span still present after erase, want unmarked")
+	}
+}
+
+// TestMoveBlockRelocatesTheTextToTheCursor mirrors rust
+// move_block_relocates_the_text_to_the_cursor, rust/src/editor.rs:1973.
+func TestMoveBlockRelocatesTheTextToTheCursor(t *testing.T) {
+	scr := screen.NewFakeScreen(24, 80)
+	e := New(config.DefaultConfig(), scr, keyboard.NewScriptedKeys(), "", "abc def")
+
+	e.markBlockStart()
+	e.buf.MoveTo(3)
+	e.markBlockEnd()
+	e.buf.MoveTo(7)
+	e.cmdMoveBlock()
+
+	if got, want := e.buf.String(), " defabc"; got != want {
+		t.Errorf("buffer = %q, want %q", got, want)
+	}
+	if _, _, ok := e.blk.Span(); ok {
+		t.Error("span still present after move, want unmarked")
+	}
+}
+
+// TestUnmarkClearsBothEndpoints mirrors rust unmark_clears_both_endpoints,
+// rust/src/editor.rs:1985.
+func TestUnmarkClearsBothEndpoints(t *testing.T) {
+	scr := screen.NewFakeScreen(24, 80)
+	e := New(config.DefaultConfig(), scr, keyboard.NewScriptedKeys(), "", "abc")
+
+	if _, err := e.dispatchBlock(ctrlKey('B')); err != nil {
+		t.Fatalf("dispatchBlock('B') err = %v", err)
+	}
+	e.buf.MoveTo(2)
+	if _, err := e.dispatchBlock(ctrlKey('K')); err != nil {
+		t.Fatalf("dispatchBlock('K') err = %v", err)
+	}
+	if _, err := e.dispatchBlock(ctrlKey('U')); err != nil {
+		t.Fatalf("dispatchBlock('U') err = %v", err)
+	}
+	if _, _, ok := e.blk.Span(); ok {
+		t.Error("span still present after unmark, want unmarked")
+	}
+}
+
+// TestBlockEndpointsSurviveUnrelatedInsertsAndDeletes mirrors rust
+// block_endpoints_survive_unrelated_inserts_and_deletes,
+// rust/src/editor.rs:1994.
+func TestBlockEndpointsSurviveUnrelatedInsertsAndDeletes(t *testing.T) {
+	scr := screen.NewFakeScreen(24, 80)
+	e := New(config.DefaultConfig(), scr, keyboard.NewScriptedKeys(), "", "abcXYZdef")
+	e.buf.MoveTo(3)
+
+	e.markBlockStart()
+	e.buf.MoveTo(6)
+	e.markBlockEnd()
+	if lo, hi, ok := e.blk.Span(); !ok || lo != 3 || hi != 6 {
+		t.Fatalf("span = (%d, %d, %v), want (3, 6, true)", lo, hi, ok)
+	}
+
+	e.buf.MoveTo(0)
+	e.dispatchChar('#')
+	if lo, hi, ok := e.blk.Span(); !ok || lo != 4 || hi != 7 {
+		t.Fatalf("span after insert = (%d, %d, %v), want (4, 7, true)", lo, hi, ok)
+	}
+
+	e.buf.MoveTo(0)
+	e.deleteRight()
+	if lo, hi, ok := e.blk.Span(); !ok || lo != 3 || hi != 6 {
+		t.Errorf("span after delete = (%d, %d, %v), want (3, 6, true)", lo, hi, ok)
+	}
+}
+
+// TestWriteBlockEmitsExactlyTheMarkedText mirrors rust
+// write_block_emits_exactly_the_marked_text, rust/src/editor.rs:2012.
+func TestWriteBlockEmitsExactlyTheMarkedText(t *testing.T) {
+	scr := screen.NewFakeScreen(24, 80)
+	path := filepath.Join(t.TempDir(), "block.txt")
+	keys := keyboard.NewScriptedKeys(append(runeKeys(path), charKey('\r'))...)
+	e := New(config.DefaultConfig(), scr, keys, "", "abc def ghi")
+	e.buf.MoveTo(4)
+
+	e.markBlockStart()
+	e.buf.MoveTo(7)
+	e.markBlockEnd()
+
+	if _, err := e.dispatchBlock(ctrlKey('W')); err != nil {
+		t.Fatalf("dispatchBlock('W') err = %v", err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile err = %v", err)
+	}
+	if string(got) != "def" {
+		t.Errorf("written = %q, want %q", got, "def")
+	}
+	if !strings.Contains(e.message, "block written") {
+		t.Errorf("message = %q, want it to mention block written", e.message)
+	}
+}
+
+// TestReadFileAtCursorInsertsTheFilesContents mirrors rust
+// read_file_at_cursor_inserts_the_files_contents, rust/src/editor.rs:2027.
+func TestReadFileAtCursorInsertsTheFilesContents(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "insert.txt")
+	if err := os.WriteFile(path, []byte("XYZ"), 0o644); err != nil {
+		t.Fatalf("WriteFile err = %v", err)
+	}
+	scr := screen.NewFakeScreen(24, 80)
+	keys := keyboard.NewScriptedKeys(append(runeKeys(path), charKey('\r'))...)
+	e := New(config.DefaultConfig(), scr, keys, "", "ab")
+	e.buf.MoveTo(1)
+
+	if _, err := e.dispatchBlock(ctrlKey('R')); err != nil {
+		t.Fatalf("dispatchBlock('R') err = %v", err)
+	}
+	if got, want := e.buf.String(), "aXYZb"; got != want {
+		t.Errorf("buffer = %q, want %q", got, want)
+	}
+}
+
 // TestCtrlQFFindMovesTheCursorToTheNextMatch drives ^Q F through
 // dispatchQuick (cmdFind, ports rust find_moves_the_cursor_to_the_next_match,
 // rust/src/editor.rs:1820).

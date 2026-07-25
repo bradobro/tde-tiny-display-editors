@@ -20,6 +20,7 @@ package editor
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"strconv"
 	"strings"
@@ -341,10 +342,9 @@ func (e *Editor) showPrefixHint(menu help.Menu) error {
 // dispatch_block, rust/src/editor.rs:355). ^KS/^KX/^KD/^KN are the file I/O
 // commands (epic 2500, ported from rust cmd_save/cmd_save_exit/cmd_save_new/
 // cmd_change_name); ^KQ quits, confirming first if the buffer is modified
-// (rust cmd_quit). ^KB/^KK/^KU mark the block's start/end and unmark it
-// (epic 2400's minimal slice of block support — see markBlockStart/
-// markBlockEnd below). Copy/move/erase/read/write-block land with block ops
-// in epic 2800.
+// (rust cmd_quit). ^KB/^KK/^KU mark the block's start/end and unmark it;
+// ^KC/^KV/^KY copy/move/erase the marked block; ^KW/^KR write the block to
+// a file and read a file in at the cursor (epic 2800).
 func (e *Editor) dispatchBlock(key keyboard.Key) (bool, error) {
 	if key.Kind == keyboard.KCtrl {
 		switch key.R {
@@ -367,6 +367,19 @@ func (e *Editor) dispatchBlock(key keyboard.Key) (bool, error) {
 		case 'U':
 			e.blk = block.Block{}
 			return false, nil
+		case 'C':
+			e.cmdCopyBlock()
+			return false, nil
+		case 'V':
+			e.cmdMoveBlock()
+			return false, nil
+		case 'Y':
+			e.cmdEraseBlock()
+			return false, nil
+		case 'W':
+			return e.cmdWriteBlock()
+		case 'R':
+			return e.cmdReadFileAtCursor()
 		}
 	}
 	e.message = "block command: not yet implemented"
@@ -563,6 +576,121 @@ func (e *Editor) markBlockStart() {
 func (e *Editor) markBlockEnd() {
 	pos := e.buf.Cursor()
 	e.blk.End = &pos
+}
+
+// copyBlockText is the shared work behind ^KC and ^KV: insert a copy of the
+// marked block's text at the cursor (ports Editor::copy_block_text,
+// rust/src/editor.rs:412). Errors — rather than silently no-op'ing — if
+// nothing is marked, or if the cursor sits inside the block being copied
+// (the ASM's Error7 "straddle" check, AND 82H on IsBlk's result, simplified
+// here to the direct lo < cursor < hi test this port's offset-based Block
+// makes trivial).
+func (e *Editor) copyBlockText() error {
+	lo, hi, ok := e.blk.Span()
+	if !ok {
+		return errors.New("copy block: no block marked")
+	}
+	cursor := e.buf.Cursor()
+	if cursor > lo && cursor < hi {
+		return errors.New("can't copy a block onto itself")
+	}
+	text := e.runesBetween(lo, hi)
+	for _, c := range text {
+		e.insertChar(c)
+	}
+	e.modified = true
+	e.targetCol = nil
+	return nil
+}
+
+// cmdCopyBlock is ^KC — copy the marked block's text to the cursor (ASM
+// Copy, zde17.asm:4606 / rust cmd_copy_block, rust/src/editor.rs:403). The
+// cursor ends up just past the inserted copy, same as the ASM.
+func (e *Editor) cmdCopyBlock() {
+	if err := e.copyBlockText(); err != nil {
+		e.message = err.Error()
+	}
+}
+
+// cmdMoveBlock is ^KV — move the marked block to the cursor (ASM MovBlk,
+// zde17.asm:4652: copy, then erase the original / rust cmd_move_block,
+// rust/src/editor.rs:439). Copying first means e.blk's endpoints have
+// already been nudged past the inserted copy (via insertChar's
+// AdjustInsert bookkeeping) by the time the erase runs, so it deletes the
+// original text rather than the copy just inserted.
+func (e *Editor) cmdMoveBlock() {
+	if err := e.copyBlockText(); err != nil {
+		e.message = err.Error()
+		return
+	}
+	e.cmdEraseBlock()
+}
+
+// cmdEraseBlock is ^KY — erase the marked block (ASM EBlock, zde17.asm:4561
+// / rust cmd_erase_block, rust/src/editor.rs:452). Leaves the block
+// unmarked afterward, matching the ASM (the marker bytes themselves were
+// inside the erased span).
+func (e *Editor) cmdEraseBlock() {
+	lo, hi, ok := e.blk.Span()
+	if !ok {
+		e.message = "erase block: no block marked"
+		return
+	}
+	e.buf.MoveTo(lo)
+	for i := lo; i < hi; i++ {
+		e.deleteCharRight()
+	}
+	e.blk = block.Block{}
+	e.modified = true
+	e.targetCol = nil
+}
+
+// cmdWriteBlock is ^KW — write the marked block's text to a file (ASM
+// Write, zde17.asm:4943 / rust cmd_write_block, rust/src/editor.rs:468).
+func (e *Editor) cmdWriteBlock() (bool, error) {
+	name, ok, err := e.promptLine("Write block to: ")
+	if err != nil || !ok {
+		return false, err
+	}
+	lo, hi, spanOK := e.blk.Span()
+	if !spanOK {
+		e.message = "write block: no block marked"
+		return false, nil
+	}
+	text := e.runesBetween(lo, hi)
+	if err := filesystem.WriteFile(name, text, false); err != nil {
+		e.message = "write failed: " + err.Error()
+		return false, nil
+	}
+	e.message = "block written"
+	return false, nil
+}
+
+// cmdReadFileAtCursor is ^KR — read a file's contents in at the cursor (ASM
+// Read, zde17.asm:4871 / rust cmd_read_file_at_cursor, rust/src/editor.rs:480).
+// Unlike opening a document by name (where a missing file just starts a
+// blank buffer), a missing file here is reported as an error — there's
+// nothing sensible to insert.
+func (e *Editor) cmdReadFileAtCursor() (bool, error) {
+	name, ok, err := e.promptLine("Read file: ")
+	if err != nil || !ok {
+		return false, err
+	}
+	text, found, err := filesystem.ReadFile(name)
+	switch {
+	case err != nil:
+		e.message = "read failed: " + err.Error()
+	case !found:
+		e.message = "read failed: file not found"
+	default:
+		for _, c := range text {
+			e.insertChar(c)
+		}
+		if len(text) > 0 {
+			e.modified = true
+		}
+	}
+	return false, nil
 }
 
 // dispatchQuick is the ^Q quick-movement/find table (QMnuSt, zde17.asm:632 /
