@@ -1963,3 +1963,143 @@ fn codepointsToUtf8(alloc: std.mem.Allocator, cps: []const u21) ![]u8 {
     }
     return out.toOwnedSlice(alloc);
 }
+
+// --- find & replace command wiring (epic 1700) ----------------------------
+
+fn editorWith(alloc: std.mem.Allocator, text: []const u8, cursor: usize) !Editor {
+    var ed = Editor.init(alloc, .{});
+    ed.buffer.deinit();
+    ed.buffer = try GapBuffer.fromStr(alloc, text);
+    ed.buffer.moveTo(cursor);
+    return ed;
+}
+
+test "find moves the cursor to the next match" {
+    var ed = try editorWith(testing.allocator, "the quick brown fox", 0);
+    defer ed.deinit();
+    var fake = FakeScreen.init(testing.allocator);
+    defer fake.deinit();
+    var sk = ScriptedKeys.init(&keysFor("brown"));
+    _ = try ed.cmdFind(sk.source(), fake.screen());
+    try testing.expectEqual(@as(usize, 10), ed.buffer.cursor());
+    try testing.expectEqualStrings("found", ed.message.?);
+}
+
+test "find reports not found and leaves the cursor" {
+    var ed = try editorWith(testing.allocator, "the quick brown fox", 3);
+    defer ed.deinit();
+    var fake = FakeScreen.init(testing.allocator);
+    defer fake.deinit();
+    var sk = ScriptedKeys.init(&keysFor("xyz"));
+    _ = try ed.cmdFind(sk.source(), fake.screen());
+    try testing.expectEqual(@as(usize, 3), ed.buffer.cursor());
+    try testing.expectEqualStrings("not found", ed.message.?);
+}
+
+test "repeat find finds the next occurrence past the last match" {
+    var ed = try editorWith(testing.allocator, "aa aa aa", 0);
+    defer ed.deinit();
+    var fake = FakeScreen.init(testing.allocator);
+    defer fake.deinit();
+    var sk = ScriptedKeys.init(&keysFor("aa"));
+    _ = try ed.cmdFind(sk.source(), fake.screen());
+    try testing.expectEqual(@as(usize, 3), ed.buffer.cursor());
+    _ = try ed.cmdRepeatFind(sk.source(), fake.screen());
+    try testing.expectEqual(@as(usize, 6), ed.buffer.cursor());
+}
+
+test "repeat find is a no-op with no previous query" {
+    var ed = try editorWith(testing.allocator, "abc", 0);
+    defer ed.deinit();
+    var fake = FakeScreen.init(testing.allocator);
+    defer fake.deinit();
+    var sk = ScriptedKeys.init(&.{});
+    const result = try ed.cmdRepeatFind(sk.source(), fake.screen());
+    try testing.expectEqual(CommandResult.cont, result);
+    try testing.expect(std.mem.indexOf(u8, ed.message.?, "no previous find") != null);
+}
+
+test "replace confirms each match and only changes accepted ones" {
+    var ed = try editorWith(testing.allocator, "cat cat cat", 0);
+    defer ed.deinit();
+    var fake = FakeScreen.init(testing.allocator);
+    defer fake.deinit();
+    var script: std.ArrayList(Key) = .empty;
+    defer script.deinit(testing.allocator);
+    try appendPromptAnswer(&script, testing.allocator, "cat");
+    try appendPromptAnswer(&script, testing.allocator, "dog");
+    try script.appendSlice(testing.allocator, &.{ .{ .char = 'n' }, .{ .char = 'y' }, .{ .char = 'n' } });
+    var sk = ScriptedKeys.init(script.items);
+    _ = try ed.cmdReplace(sk.source(), fake.screen());
+    const text = try bufferText(&ed);
+    defer testing.allocator.free(text);
+    try testing.expectEqualStrings("cat dog cat", text);
+    try testing.expect(std.mem.indexOf(u8, ed.message.?, "1 replaced") != null);
+}
+
+test "global replace changes every match without prompting" {
+    var ed = try editorWith(testing.allocator, "cat cat cat", 0);
+    defer ed.deinit();
+    ed.query.global = true;
+    var fake = FakeScreen.init(testing.allocator);
+    defer fake.deinit();
+    var script: std.ArrayList(Key) = .empty;
+    defer script.deinit(testing.allocator);
+    try appendPromptAnswer(&script, testing.allocator, "cat");
+    try appendPromptAnswer(&script, testing.allocator, "dog");
+    var sk = ScriptedKeys.init(script.items);
+    _ = try ed.cmdReplace(sk.source(), fake.screen());
+    const text = try bufferText(&ed);
+    defer testing.allocator.free(text);
+    try testing.expectEqualStrings("dog dog dog", text);
+    try testing.expect(std.mem.indexOf(u8, ed.message.?, "3 replaced") != null);
+}
+
+test "repeat find reruns the last replace as a fresh operation" {
+    var ed = try editorWith(testing.allocator, "cat", 0);
+    defer ed.deinit();
+    var fake = FakeScreen.init(testing.allocator);
+    defer fake.deinit();
+    var script: std.ArrayList(Key) = .empty;
+    defer script.deinit(testing.allocator);
+    try appendPromptAnswer(&script, testing.allocator, "cat");
+    try appendPromptAnswer(&script, testing.allocator, "dog");
+    try script.append(testing.allocator, .{ .char = 'n' }); // decline the only match this time
+    var sk = ScriptedKeys.init(script.items);
+    _ = try ed.cmdReplace(sk.source(), fake.screen());
+    var text = try bufferText(&ed);
+    try testing.expectEqualStrings("cat", text);
+    try testing.expect(std.mem.indexOf(u8, ed.message.?, "0 replaced") != null);
+    testing.allocator.free(text);
+
+    ed.buffer.moveTo(0);
+    var sk2 = ScriptedKeys.init(&.{.{ .char = 'y' }}); // accept it this time
+    _ = try ed.cmdRepeatFind(sk2.source(), fake.screen());
+    text = try bufferText(&ed);
+    defer testing.allocator.free(text);
+    try testing.expectEqualStrings("dog", text);
+    try testing.expect(std.mem.indexOf(u8, ed.message.?, "1 replaced") != null);
+}
+
+test "case-insensitive find locates a differently-cased match" {
+    var ed = try editorWith(testing.allocator, "Hello World", 0);
+    defer ed.deinit();
+    ed.query.ignore_case = true;
+    var fake = FakeScreen.init(testing.allocator);
+    defer fake.deinit();
+    var sk = ScriptedKeys.init(&keysFor("world"));
+    _ = try ed.cmdFind(sk.source(), fake.screen());
+    try testing.expectEqual(@as(usize, 6), ed.buffer.cursor());
+    try testing.expectEqualStrings("found", ed.message.?);
+}
+
+test "backward find searches from just before the cursor" {
+    var ed = try editorWith(testing.allocator, "brown fox, brown dog", 21);
+    defer ed.deinit();
+    ed.query.backward = true;
+    var fake = FakeScreen.init(testing.allocator);
+    defer fake.deinit();
+    var sk = ScriptedKeys.init(&keysFor("brown"));
+    _ = try ed.cmdFind(sk.source(), fake.screen());
+    try testing.expectEqual(@as(usize, 11), ed.buffer.cursor());
+}

@@ -1,6 +1,6 @@
 # Epic 1700 — Search & Replace (Zig)
 
-Status: ready
+Status: done
 
 ## Goal
 
@@ -19,7 +19,7 @@ case-insensitive.
 
 ## Iterations
 
-- [[doc/iterations/1701-iter-find-replace]]
+- [[doc/iterations/completed/1701-iter-find-replace]]
 
 ## Exit criteria
 

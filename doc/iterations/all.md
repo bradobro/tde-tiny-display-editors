@@ -55,7 +55,7 @@ How this port differs from the Rust one (see ADR 0007):
 - ✅ [[doc/iterations/1400-EPIC-zig-core-editing]] — insert/delete/undo + cursor movement
 - ✅ [[doc/iterations/1500-EPIC-zig-file-io]] — load/save/.bak/change-name/quit
 - ✅ [[doc/iterations/1600-EPIC-zig-formatting]] — wordwrap, reformat, margins, tabs, center
-- ⬜ [[doc/iterations/1700-EPIC-zig-search]] — find/replace/repeat
+- ✅ [[doc/iterations/1700-EPIC-zig-search]] — find/replace/repeat
 - ⬜ [[doc/iterations/1800-EPIC-zig-block-ops]] — block mark/copy/move/erase/read/write
 - ⬜ [[doc/iterations/1900-EPIC-zig-help-docs]] — help menus, toggles, MANUAL edits, README
 - ⬜ [[doc/iterations/2000-EPIC-zig-advanced-deferred]] — directory view; windowing seam (no macros)
@@ -92,7 +92,7 @@ How this port differs from the Rust one (see ADR 0007):
 
 ### Zig: 1700 — Search & Replace
 
-- ⬜ [[doc/iterations/1701-iter-find-replace]] — `^QF`/`^QA`/`^L` command wiring over the done `search.zig` core
+- ✅ [[doc/iterations/completed/1701-iter-find-replace]] — `^QF`/`^QA`/`^L` command wiring over the done `search.zig` core
 
 ### Zig: 1800 — Block Ops
 
