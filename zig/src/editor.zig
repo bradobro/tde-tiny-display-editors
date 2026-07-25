@@ -288,7 +288,7 @@ pub const Editor = struct {
             .esc => self.dispatchPrefix(.escape, keys, screen),
             .ctrl => |k| switch (k) {
                 'A' => self.cmdWordLeft(),
-                'B' => self.cmdUnsupported("reform paragraph"),
+                'B' => self.cmdReform(),
                 'C' => self.cmdPageForward(),
                 'F' => self.cmdWordRight(),
                 'G' => self.cmdDeleteRight(),
@@ -392,24 +392,22 @@ pub const Editor = struct {
 
     /// `^O` onscreen toggles/margins table (`OMnuSt`, `zde17.asm:577`).
     fn dispatchOnscreen(self: *Self, key: Key, keys: KeySource, screen: Screen) !CommandResult {
-        _ = keys;
-        _ = screen;
         return switch (key) {
             .esc => .cont,
             .char => |c| if (c == ' ') CommandResult.cont else self.cmdUnsupported("onscreen command"),
             .up => self.cmdMakeTop(),
             .ctrl => |k| switch (k) {
                 'A' => self.cmdToggleAutoIndent(),
-                'C' => self.cmdUnsupported("center line"), // epic 1600
-                'F' => self.cmdUnsupported("flush right"), // epic 1600
+                'C' => self.cmdCenterOrFlush(false),
+                'F' => self.cmdCenterOrFlush(true),
                 'D' => self.cmdToggleShowHardCr(),
-                'L' => self.cmdUnsupported("set left margin"), // epic 1600
-                'R' => self.cmdUnsupported("set right margin"), // epic 1600
+                'L' => self.cmdSetMargin(keys, screen, "Left margin: ", true),
+                'R' => self.cmdSetMargin(keys, screen, "Right margin: ", false),
                 'S' => self.cmdToggleDoubleSpace(),
                 'T' => self.cmdToggleRuler(),
                 'V' => self.cmdToggleVariableTabs(),
-                'I' => self.cmdUnsupported("set variable tab"), // epic 1600
-                'N' => self.cmdUnsupported("clear variable tab"), // epic 1600
+                'I' => self.cmdSetVariableTab(keys, screen),
+                'N' => self.cmdClearVariableTab(keys, screen),
                 'H' => self.cmdDropped("hyphenation"),
                 'J' => self.cmdDropped("proportional spacing"),
                 'P' => self.cmdDropped("printer page format"),
@@ -487,9 +485,44 @@ pub const Editor = struct {
         try self.insertChar(c);
         self.modified = true;
         self.target_col = null;
-        // TODO(iter 1601/1602): word wrap past the right margin (ASM
-        //   `WdWrap`) needs the format module's reformat/margin logic.
+        // ASM only checks wordwrap after an ordinary printing char, not a
+        // space (the wrap search below looks *backward* for a space, so
+        // checking right after typing one would just find itself) or a tab
+        // (`zde17.asm:4094`-`4099`).
+        if (c != ' ' and c != '\t') try self.wrapIfPastMargin();
         return .cont;
+    }
+
+    /// Wrap the current word to a new line if it just pushed past the right
+    /// margin (ASM `WdWrap`, `zde17.asm:5419`). The word is already in the
+    /// buffer (the user just typed its last char); wrapping only needs to
+    /// swap the space before it for a line break, then apply the left margin.
+    fn wrapIfPastMargin(self: *Self) !void {
+        const col = self.buffer.columnOf(self.buffer.cursor(), self.tabWidth()) + 1;
+        if (format.checkRightMargin(col, self.cfg.right_margin) != .wrap_word) return;
+        const cursor = self.buffer.cursor();
+        const line_start = self.buffer.lineStart(cursor);
+        var prefix: std.ArrayList(u21) = .empty;
+        defer prefix.deinit(self.alloc);
+        var i = line_start;
+        while (i < cursor) : (i += 1) try prefix.append(self.alloc, self.buffer.charAt(i).?);
+        const break_at = format.findWrapPoint(prefix.items) orelse return;
+        self.buffer.moveTo(line_start + break_at);
+        _ = self.deleteRight(); // the space the word was wrapping at
+        try self.insertChar('\n');
+        const inserted = try self.applyLeftMargin();
+        self.buffer.moveTo(cursor + inserted);
+        self.modified = true;
+    }
+
+    /// Insert spaces to bring the cursor's line up to `Config.left_margin`
+    /// (ASM `DoLM`, `zde17.asm:5330`), returning how many were inserted so
+    /// callers can adjust a saved cursor offset.
+    fn applyLeftMargin(self: *Self) !usize {
+        const n = @as(usize, self.cfg.left_margin) -| 1;
+        var i: usize = 0;
+        while (i < n) : (i += 1) try self.insertChar(' ');
+        return n;
     }
 
     /// The leading run of spaces/tabs on the line containing `offset`,
@@ -752,6 +785,127 @@ pub const Editor = struct {
 
     fn cmdToggleVariableTabs(self: *Self) CommandResult {
         self.variable_tabs_on = !self.variable_tabs_on;
+        return .cont;
+    }
+
+    /// The span `[start, end)` of the paragraph containing `offset`: the
+    /// widest run of non-blank lines around it, stopping at a blank line or
+    /// the ends of the document. `end` lands on the last line's own
+    /// terminating `'\n'` (or end-of-document), so that hard CR is never
+    /// touched by the reflow that replaces `[start, end)`.
+    fn paragraphBounds(self: *Self, offset: usize) struct { start: usize, end: usize } {
+        var start = self.buffer.lineStart(offset);
+        while (start > 0) {
+            const prev_start = self.lineStartNBack(start, 1);
+            if (self.buffer.lineEnd(prev_start) == prev_start) break; // blank line above: stop
+            start = prev_start;
+        }
+        var end = self.buffer.lineEnd(offset);
+        while (true) {
+            const next_start = end + 1;
+            if (next_start > self.buffer.len() or self.buffer.lineEnd(next_start) == next_start) break;
+            end = self.buffer.lineEnd(next_start);
+        }
+        return .{ .start = start, .end = end };
+    }
+
+    /// Read `[start, end)` out of the buffer as an owned codepoint slice.
+    fn sliceText(self: *Self, start: usize, end: usize) ![]u21 {
+        var out: std.ArrayList(u21) = .empty;
+        errdefer out.deinit(self.alloc);
+        var i = start;
+        while (i < end) : (i += 1) try out.append(self.alloc, self.buffer.charAt(i).?);
+        return out.toOwnedSlice(self.alloc);
+    }
+
+    /// Replace `[start, end)` with `replacement`, leaving the cursor right
+    /// after the inserted text.
+    fn replaceSpan(self: *Self, start: usize, end: usize, replacement: []const u21) !void {
+        self.buffer.moveTo(start);
+        var i = start;
+        while (i < end) : (i += 1) _ = self.deleteRight();
+        for (replacement) |c| try self.insertChar(c);
+    }
+
+    /// `^B` — reflow the cursor's paragraph to the current margins (ASM
+    /// `Reform`, `zde17.asm:5477`). A no-op when the right margin is off,
+    /// same as the ASM.
+    fn cmdReform(self: *Self) !CommandResult {
+        if (self.cfg.right_margin <= 1) return self.cmdUnsupported("reform paragraph (no right margin set)");
+        const span = self.paragraphBounds(self.buffer.cursor());
+        const original = try self.sliceText(span.start, span.end);
+        defer self.alloc.free(original);
+        const reflowed = try format.reflowParagraph(self.alloc, original, self.cfg.left_margin, self.cfg.right_margin);
+        defer self.alloc.free(reflowed);
+        try self.replaceSpan(span.start, span.end, reflowed);
+        self.modified = true;
+        return .cont;
+    }
+
+    /// `^OC`/`^OF` — center or flush-right the cursor's line between the
+    /// margins (ASM `Center`, `zde17.asm:5691`). A no-op when the right
+    /// margin is off, same as the ASM.
+    fn cmdCenterOrFlush(self: *Self, flush_right: bool) !CommandResult {
+        if (self.cfg.right_margin <= 1) return self.cmdUnsupported("center/flush line (no right margin set)");
+        const start = self.buffer.lineStart(self.buffer.cursor());
+        const end = self.buffer.lineEnd(self.buffer.cursor());
+        const text = try self.sliceText(start, end);
+        defer self.alloc.free(text);
+        const centered = try format.centerLine(self.alloc, text, self.cfg.left_margin, self.cfg.right_margin, flush_right);
+        defer self.alloc.free(centered);
+        try self.replaceSpan(start, end, centered);
+        self.modified = true;
+        return .cont;
+    }
+
+    /// `^OL`/`^OR` — prompt for a column and set the left or right margin
+    /// (ASM `SetLM`/`SetRM`, `zde17.asm:5216`,`5214`). Leaves the margin
+    /// unchanged on a cancelled or non-numeric entry.
+    fn cmdSetMargin(self: *Self, keys: KeySource, screen: Screen, prompt: []const u8, is_left: bool) !CommandResult {
+        const input = (try self.readLine(screen, keys, prompt)) orelse return .cont;
+        defer self.alloc.free(input);
+        const col = parseColumn(input) orelse return self.badColumnMessage(input);
+        if (is_left) self.cfg.left_margin = col else self.cfg.right_margin = col;
+        return .cont;
+    }
+
+    /// An empty prompt answer defaults to the cursor's current column,
+    /// matching the ASM's "default is Here" convention (`VTSet`/`VTClr`,
+    /// `zde17.asm:3930`,`4015`).
+    fn parseColumnOrHere(self: *Self, input: []const u21) ?u8 {
+        const trimmed = trimSpaces(input);
+        if (trimmed.len == 0) return std.math.cast(u8, self.cur_col);
+        return parseColumn(trimmed);
+    }
+
+    fn badColumnMessage(self: *Self, input: []const u21) !CommandResult {
+        const encoded = try codepointsToUtf8(self.alloc, input);
+        defer self.alloc.free(encoded);
+        try self.setMessage("not a column number: {s}", .{encoded});
+        return .cont;
+    }
+
+    /// `^OI` — add a variable tab stop (ASM `VTSet`, `zde17.asm:3926`),
+    /// simplified to the single-column form: the ASM's `@n` (evenly spaced)
+    /// and `#` (explicit group) shorthand aren't ported.
+    fn cmdSetVariableTab(self: *Self, keys: KeySource, screen: Screen) !CommandResult {
+        const input = (try self.readLine(screen, keys, "Set tab at column: ")) orelse return .cont;
+        defer self.alloc.free(input);
+        const col = self.parseColumnOrHere(input) orelse return self.badColumnMessage(input);
+        if (!format.insertTabStop(self.cfg.variable_tabs[0..], col)) {
+            try self.setMessage("can't set a tab stop at column {d}", .{col});
+        }
+        return .cont;
+    }
+
+    /// `^ON` — remove a variable tab stop (ASM `VTClr`, `zde17.asm:4013`).
+    fn cmdClearVariableTab(self: *Self, keys: KeySource, screen: Screen) !CommandResult {
+        const input = (try self.readLine(screen, keys, "Clear tab at column: ")) orelse return .cont;
+        defer self.alloc.free(input);
+        const col = self.parseColumnOrHere(input) orelse return self.badColumnMessage(input);
+        if (!format.removeTabStop(self.cfg.variable_tabs[0..], col)) {
+            try self.setMessage("no tab stop at column {d}", .{col});
+        }
         return .cont;
     }
 
@@ -1145,6 +1299,30 @@ fn isWordChar(c: u21) bool {
     return (c >= '0' and c <= '9') or (c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z') or c == '_';
 }
 
+/// `input` with leading/trailing ASCII spaces removed, for parsing a typed
+/// column number (ASM prompts don't otherwise trim their input).
+fn trimSpaces(input: []const u21) []const u21 {
+    var lo: usize = 0;
+    var hi: usize = input.len;
+    while (lo < hi and input[lo] == ' ') : (lo += 1) {}
+    while (hi > lo and input[hi - 1] == ' ') : (hi -= 1) {}
+    return input[lo..hi];
+}
+
+/// Parse a trimmed column number typed at a prompt (`^OL`/`^OR`/`^OI`/`^ON`).
+/// `null` on anything that isn't a plain `u8` decimal number.
+fn parseColumn(input: []const u21) ?u8 {
+    const trimmed = trimSpaces(input);
+    if (trimmed.len == 0) return null;
+    var value: u16 = 0;
+    for (trimmed) |c| {
+        if (c < '0' or c > '9') return null;
+        value = value * 10 + @as(u16, @intCast(c - '0'));
+        if (value > 255) return null;
+    }
+    return @intCast(value);
+}
+
 // --- tests ---------------------------------------------------------------
 
 const testing = std.testing;
@@ -1384,6 +1562,242 @@ test "run: quit without ^K prefix leaves the loop running (unsupported ctrl fall
     };
     try runScript(&ed, &script);
     try testing.expect(ed.message == null); // cleared at the top of the next loop
+}
+
+// --- formatting: word wrap, reform, center/flush, margins, tabs (epic 1600) --
+
+test "typing past the right margin wraps the current word" {
+    var ed = Editor.init(testing.allocator, .{ .right_margin = 10, .left_margin = 1 });
+    defer ed.deinit();
+    ed.buffer.deinit();
+    ed.buffer = try GapBuffer.fromStr(testing.allocator, "one two ");
+    ed.buffer.moveTo(8);
+    for ("three") |c| _ = try ed.cmdInsert(c);
+    const text = try bufferText(&ed);
+    defer testing.allocator.free(text);
+    try testing.expectEqualStrings("one two\nthree", text);
+    try testing.expectEqual(@as(usize, 13), ed.buffer.cursor());
+}
+
+test "wrapped line is indented to the left margin" {
+    var ed = Editor.init(testing.allocator, .{ .right_margin = 10, .left_margin = 3 });
+    defer ed.deinit();
+    ed.buffer.deinit();
+    ed.buffer = try GapBuffer.fromStr(testing.allocator, "one two ");
+    ed.buffer.moveTo(8);
+    for ("three") |c| _ = try ed.cmdInsert(c);
+    const text = try bufferText(&ed);
+    defer testing.allocator.free(text);
+    try testing.expectEqualStrings("one two\n  three", text);
+}
+
+test "a single overlong word is not wrapped" {
+    var ed = Editor.init(testing.allocator, .{ .right_margin = 5 });
+    defer ed.deinit();
+    for ("supercalifragilistic") |c| _ = try ed.cmdInsert(c);
+    const text = try bufferText(&ed);
+    defer testing.allocator.free(text);
+    try testing.expectEqualStrings("supercalifragilistic", text);
+}
+
+test "tab key inserts a literal tab when variable tabs are off" {
+    var ed = Editor.init(testing.allocator, .{});
+    defer ed.deinit();
+    _ = try ed.cmdTab();
+    const text = try bufferText(&ed);
+    defer testing.allocator.free(text);
+    try testing.expectEqualStrings("\t", text);
+}
+
+test "tab key inserts spaces to the next variable stop when enabled" {
+    var ed = Editor.init(testing.allocator, .{});
+    defer ed.deinit();
+    ed.variable_tabs_on = true;
+    ed.buffer.deinit();
+    ed.buffer = try GapBuffer.fromStr(testing.allocator, "ab");
+    _ = try ed.cmdTab();
+    const text = try bufferText(&ed);
+    defer testing.allocator.free(text);
+    try testing.expectEqualStrings("      ab", text); // stop at col 6 (config default)
+}
+
+test "tab key is a no-op past every variable stop" {
+    var ed = Editor.init(testing.allocator, .{});
+    defer ed.deinit();
+    ed.variable_tabs_on = true;
+    ed.buffer.deinit();
+    ed.buffer = try GapBuffer.fromStr(testing.allocator, " " ** 30);
+    ed.buffer.moveTo(30);
+    _ = try ed.cmdTab();
+    const text = try bufferText(&ed);
+    defer testing.allocator.free(text);
+    try testing.expectEqualStrings(" " ** 30, text);
+}
+
+test "reform reflows the cursor's paragraph to the margins" {
+    var ed = Editor.init(testing.allocator, .{ .right_margin = 15, .left_margin = 1 });
+    defer ed.deinit();
+    ed.buffer.deinit();
+    ed.buffer = try GapBuffer.fromStr(testing.allocator, "the quick brown fox\njumps over\n\nnext paragraph");
+    ed.buffer.moveTo(0);
+    _ = try ed.cmdReform();
+    const text = try bufferText(&ed);
+    defer testing.allocator.free(text);
+    try testing.expectEqualStrings("the quick brown\nfox jumps over\n\nnext paragraph", text);
+}
+
+test "reform is a no-op when the right margin is off" {
+    var ed = Editor.init(testing.allocator, .{ .right_margin = 1 });
+    defer ed.deinit();
+    ed.buffer.deinit();
+    ed.buffer = try GapBuffer.fromStr(testing.allocator, "the quick brown fox");
+    _ = try ed.cmdReform();
+    const text = try bufferText(&ed);
+    defer testing.allocator.free(text);
+    try testing.expectEqualStrings("the quick brown fox", text);
+    try testing.expect(std.mem.indexOf(u8, ed.message.?, "not implemented") != null);
+}
+
+test "center and flush place the line at the right columns" {
+    var ed = Editor.init(testing.allocator, .{ .right_margin = 11, .left_margin = 1 });
+    defer ed.deinit();
+    ed.buffer.deinit();
+    ed.buffer = try GapBuffer.fromStr(testing.allocator, "hi");
+    _ = try ed.cmdCenterOrFlush(false);
+    const centered = try bufferText(&ed);
+    defer testing.allocator.free(centered);
+    try testing.expectEqualStrings("    hi", centered);
+
+    var ed2 = Editor.init(testing.allocator, .{ .right_margin = 11, .left_margin = 1 });
+    defer ed2.deinit();
+    ed2.buffer.deinit();
+    ed2.buffer = try GapBuffer.fromStr(testing.allocator, "hi");
+    _ = try ed2.cmdCenterOrFlush(true);
+    const flushed = try bufferText(&ed2);
+    defer testing.allocator.free(flushed);
+    try testing.expectEqualStrings("         hi", flushed);
+}
+
+test "auto-indent copies leading whitespace onto the new line" {
+    var ed = Editor.init(testing.allocator, .{});
+    defer ed.deinit();
+    ed.auto_indent = true;
+    ed.buffer.deinit();
+    ed.buffer = try GapBuffer.fromStr(testing.allocator, "  indented");
+    ed.buffer.moveTo(ed.buffer.len());
+    _ = try ed.cmdCr(false);
+    const text = try bufferText(&ed);
+    defer testing.allocator.free(text);
+    try testing.expectEqualStrings("  indented\n  ", text);
+}
+
+test "double-space inserts a blank line on enter" {
+    var ed = Editor.init(testing.allocator, .{});
+    defer ed.deinit();
+    ed.double_space = true;
+    ed.buffer.deinit();
+    ed.buffer = try GapBuffer.fromStr(testing.allocator, "hi");
+    ed.buffer.moveTo(2);
+    _ = try ed.cmdCr(false);
+    const text = try bufferText(&ed);
+    defer testing.allocator.free(text);
+    try testing.expectEqualStrings("hi\n\n", text);
+}
+
+test "toggle auto-indent and double-space flip their flags" {
+    var ed = Editor.init(testing.allocator, .{});
+    defer ed.deinit();
+    _ = ed.cmdToggleAutoIndent();
+    try testing.expect(ed.auto_indent);
+    _ = ed.cmdToggleDoubleSpace();
+    try testing.expect(ed.double_space);
+}
+
+test "toggle show-hard-cr and variable-tabs flip their flags" {
+    var ed = Editor.init(testing.allocator, .{});
+    defer ed.deinit();
+    const original = ed.show_hard_cr;
+    _ = ed.cmdToggleShowHardCr();
+    try testing.expectEqual(!original, ed.show_hard_cr);
+    try testing.expect(!ed.variable_tabs_on);
+    _ = ed.cmdToggleVariableTabs();
+    try testing.expect(ed.variable_tabs_on);
+}
+
+test "set margin reads a column number and applies it" {
+    var ed = Editor.init(testing.allocator, .{});
+    defer ed.deinit();
+    var fake = FakeScreen.init(testing.allocator);
+    defer fake.deinit();
+    var sk = ScriptedKeys.init(&.{ .{ .char = '4' }, .{ .char = '0' }, .{ .char = '\r' } });
+    _ = try ed.cmdSetMargin(sk.source(), fake.screen(), "Right margin: ", false);
+    try testing.expectEqual(@as(u8, 40), ed.cfg.right_margin);
+}
+
+test "set margin rejects non-numeric input" {
+    var ed = Editor.init(testing.allocator, .{});
+    defer ed.deinit();
+    const original = ed.cfg.right_margin;
+    var fake = FakeScreen.init(testing.allocator);
+    defer fake.deinit();
+    var sk = ScriptedKeys.init(&.{ .{ .char = 'x' }, .{ .char = '\r' } });
+    _ = try ed.cmdSetMargin(sk.source(), fake.screen(), "Right margin: ", false);
+    try testing.expectEqual(original, ed.cfg.right_margin);
+    try testing.expect(std.mem.indexOf(u8, ed.message.?, "not a column number") != null);
+}
+
+fn keysFor(comptime s: []const u8) [s.len + 1]Key {
+    var out: [s.len + 1]Key = undefined;
+    for (s, 0..) |c, i| out[i] = .{ .char = c };
+    out[s.len] = .{ .char = '\r' };
+    return out;
+}
+
+test "set variable tab inserts a sorted stop" {
+    var ed = Editor.init(testing.allocator, .{});
+    defer ed.deinit();
+    var fake = FakeScreen.init(testing.allocator);
+    defer fake.deinit();
+    const script = keysFor("9");
+    var sk = ScriptedKeys.init(&script);
+    _ = try ed.cmdSetVariableTab(sk.source(), fake.screen());
+    try testing.expectEqualSlices(u8, &.{ 6, 9, 11, 16, 21, 0, 0, 0 }, &ed.cfg.variable_tabs);
+}
+
+test "set variable tab defaults to the cursor column when left blank" {
+    var ed = Editor.init(testing.allocator, .{});
+    defer ed.deinit();
+    ed.buffer.deinit();
+    ed.buffer = try GapBuffer.fromStr(testing.allocator, "hello");
+    ed.buffer.moveTo(3);
+    ed.orient();
+    var fake = FakeScreen.init(testing.allocator);
+    defer fake.deinit();
+    var sk = ScriptedKeys.init(&.{.{ .char = '\r' }});
+    _ = try ed.cmdSetVariableTab(sk.source(), fake.screen());
+    try testing.expect(std.mem.indexOfScalar(u8, &ed.cfg.variable_tabs, 4) != null);
+}
+
+test "clear variable tab removes a configured stop" {
+    var ed = Editor.init(testing.allocator, .{});
+    defer ed.deinit();
+    var fake = FakeScreen.init(testing.allocator);
+    defer fake.deinit();
+    const script = keysFor("11");
+    var sk = ScriptedKeys.init(&script);
+    _ = try ed.cmdClearVariableTab(sk.source(), fake.screen());
+    try testing.expectEqualSlices(u8, &.{ 6, 16, 21, 0, 0, 0, 0, 0 }, &ed.cfg.variable_tabs);
+}
+
+test "clear variable tab reports a missing stop" {
+    var ed = Editor.init(testing.allocator, .{});
+    defer ed.deinit();
+    var fake = FakeScreen.init(testing.allocator);
+    defer fake.deinit();
+    const script = keysFor("99");
+    var sk = ScriptedKeys.init(&script);
+    _ = try ed.cmdClearVariableTab(sk.source(), fake.screen());
+    try testing.expect(std.mem.indexOf(u8, ed.message.?, "no tab stop") != null);
 }
 
 // --- file I/O command wiring (epic 1500) --------------------------------

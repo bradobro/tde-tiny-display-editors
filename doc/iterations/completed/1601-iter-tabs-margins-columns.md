@@ -1,12 +1,12 @@
 # 1601 — Tabs, margins & column tracking
 
 Epic: [[doc/iterations/1600-EPIC-zig-formatting]]
-Status: ready
+Status: done
 
 ## Progress
-- ⬜ design
-- ⬜ implement
-- ⬜ test
+- ✅ design
+- ✅ implement
+- ✅ test
 
 ## Goal
 
@@ -32,3 +32,18 @@ tab stops, and margins.
 ## References
 - `rust/src/format.rs`. ASM column update `zde17.asm:5378`, tabs `VTList`
   `zde17.asm:162`.
+
+## Implementation notes
+
+- `format.zig` fleshed out with `displayColumn`/`insertTabStop`/`removeTabStop`
+  ported from `rust/src/format.rs`, operating on `[]const u21` (the buffer's
+  own element type) rather than Rust's `&str` — no string conversion needed
+  at the `editor.zig` call sites.
+- `^OL`/`^OR` wired via `cmdSetMargin` (shared prompt-then-parse helper);
+  `^OI`/`^ON` via `cmdSetVariableTab`/`cmdClearVariableTab`, including the
+  "blank input defaults to the cursor's current column" convention
+  (`parseColumnOrHere`).
+- Implemented alongside 1602 in one pass since both iterations touch the same
+  `format.zig`/`editor.zig` files; see that iteration's notes for the
+  wrap/reflow/center half. Verified together: 106/106 `zig build test`, zero
+  leaks, `zig fmt --check` clean.

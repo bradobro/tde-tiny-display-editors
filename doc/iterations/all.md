@@ -54,7 +54,7 @@ How this port differs from the Rust one (see ADR 0007):
 - ✅ [[doc/iterations/1300-EPIC-zig-screen-loop]] — ANSI backend, render, status line, main loop + visible cursor
 - ✅ [[doc/iterations/1400-EPIC-zig-core-editing]] — insert/delete/undo + cursor movement
 - ✅ [[doc/iterations/1500-EPIC-zig-file-io]] — load/save/.bak/change-name/quit
-- ⬜ [[doc/iterations/1600-EPIC-zig-formatting]] — wordwrap, reformat, margins, tabs, center
+- ✅ [[doc/iterations/1600-EPIC-zig-formatting]] — wordwrap, reformat, margins, tabs, center
 - ⬜ [[doc/iterations/1700-EPIC-zig-search]] — find/replace/repeat
 - ⬜ [[doc/iterations/1800-EPIC-zig-block-ops]] — block mark/copy/move/erase/read/write
 - ⬜ [[doc/iterations/1900-EPIC-zig-help-docs]] — help menus, toggles, MANUAL edits, README
@@ -87,8 +87,8 @@ How this port differs from the Rust one (see ADR 0007):
 
 ### Zig: 1600 — Formatting
 
-- ⬜ [[doc/iterations/1601-iter-tabs-margins-columns]] — column tracking, hard/variable tabs, margins
-- ⬜ [[doc/iterations/1602-iter-wordwrap-reform-center]] — word wrap, paragraph reform, center/flush
+- ✅ [[doc/iterations/completed/1601-iter-tabs-margins-columns]] — column tracking, hard/variable tabs, margins
+- ✅ [[doc/iterations/completed/1602-iter-wordwrap-reform-center]] — word wrap, paragraph reform, center/flush
 
 ### Zig: 1700 — Search & Replace
 

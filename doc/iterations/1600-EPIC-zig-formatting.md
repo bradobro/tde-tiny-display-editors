@@ -1,6 +1,6 @@
 # Epic 1600 — Formatting (Zig)
 
-Status: ready
+Status: done
 
 ## Goal
 
@@ -19,8 +19,8 @@ paragraph reflow, and centering — the `^O` family and `^B`.
 
 ## Iterations
 
-- [[doc/iterations/1601-iter-tabs-margins-columns]]
-- [[doc/iterations/1602-iter-wordwrap-reform-center]]
+- [[doc/iterations/completed/1601-iter-tabs-margins-columns]]
+- [[doc/iterations/completed/1602-iter-wordwrap-reform-center]]
 
 ## Exit criteria
 
