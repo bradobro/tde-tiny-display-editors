@@ -1,6 +1,6 @@
 # 0101 — Scaffold & config
 
-Epic: [[doc/iterations/go/x2100-EPIC-go-scaffolding]]
+Epic: [[doc/iterations/x2100-EPIC-go-scaffolding]]
 Status: done
 
 ## Progress

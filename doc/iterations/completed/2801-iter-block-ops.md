@@ -1,6 +1,6 @@
 # 2801 — Block operations command wiring
 
-Epic: [[doc/iterations/go/x2800-EPIC-go-block-ops]]
+Epic: [[doc/iterations/x2800-EPIC-go-block-ops]]
 Status: done
 
 ## Progress
@@ -27,8 +27,8 @@ Wire the `^K` block commands to the already-implemented `block` offset math.
   buffer and correct residual block offsets; `^KW`+`^KR` round-trips a temp file.
 
 ## Depends on
-- [[doc/iterations/go/x2500-EPIC-go-file-io]] (for `^KW`/`^KR`),
-  [[doc/iterations/go/x2400-EPIC-go-core-editing]].
+- [[doc/iterations/x2500-EPIC-go-file-io]] (for `^KW`/`^KR`),
+  [[doc/iterations/x2400-EPIC-go-core-editing]].
 
 ## References
 - `rust/src/block.rs`, `rust/src/editor.rs`. ASM MARK/block `zde17.asm:4420`.

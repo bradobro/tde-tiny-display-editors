@@ -1,6 +1,6 @@
 # 0102 — Backend & interface design (ADR 0008)
 
-Epic: [[doc/iterations/go/x2100-EPIC-go-scaffolding]]
+Epic: [[doc/iterations/x2100-EPIC-go-scaffolding]]
 Status: done
 
 ## Progress

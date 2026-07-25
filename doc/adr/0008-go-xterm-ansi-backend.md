@@ -11,7 +11,7 @@ ADR `0007`). We are adding a third reference implementation in **Go** under
 `go/`, meant to be worked independently in its own git worktree. The Rust port,
 its ADRs (`0001`-`0006`), and `doc/MANUAL.md` are the spec; this ADR records the
 Go-specific decisions that diverge from or refine the Rust choices. The Go plan
-lives in `[[doc/iterations/go/all]]`.
+lives in `[[doc/iterations/all]]`.
 
 The project's headline question is "how small/faithful can this editor be?" Rust
 (~660k, one dep: crossterm) and Zig (zero deps, raw ANSI + termios) bracket the
@@ -112,4 +112,4 @@ differs.
   `[[doc/adr/0003-reserved-control-keys]]`, `[[doc/adr/0004-v1-feature-scope]]`,
   `[[doc/adr/0005-buffer-data-structure]]`, `[[doc/adr/0006-config-hardcoded-struct]]`.
 - Parallels the Zig decisions in `[[doc/adr/0007-zig-raw-ansi-backend]]`.
-- Go plan: `[[doc/iterations/go/all]]`.
+- Go plan: `[[doc/iterations/all]]`.

@@ -29,4 +29,4 @@ case-insensitive.
 ## References
 
 - ASM FIND/REPLACE `zde17.asm:3351`. `rust/src/search.rs`, `rust/src/editor.rs`.
-- Depends on `[[doc/iterations/1400-EPIC-zig-core-editing]]`.
+- Depends on `[[doc/iterations/x1400-EPIC-zig-core-editing]]`.

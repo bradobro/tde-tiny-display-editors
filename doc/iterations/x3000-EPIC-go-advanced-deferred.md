@@ -19,7 +19,7 @@ entirely, per ADR `0008`).
 
 ## Iterations
 
-- [[doc/iterations/go/completed/3002-iter-directory-view]]
+- [[doc/iterations/completed/3002-iter-directory-view]]
 
 ## Exit criteria
 

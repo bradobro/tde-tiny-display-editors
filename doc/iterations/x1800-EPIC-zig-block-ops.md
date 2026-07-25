@@ -30,4 +30,4 @@ region — built on the already-implemented `block.zig` offset math.
 
 - ASM MARK/block `zde17.asm:4420` onward. `rust/src/block.rs`,
   `rust/src/editor.rs`.
-- Depends on `[[doc/iterations/1500-EPIC-zig-file-io]]` (for `^KW`/`^KR`).
+- Depends on `[[doc/iterations/x1500-EPIC-zig-file-io]]` (for `^KW`/`^KR`).

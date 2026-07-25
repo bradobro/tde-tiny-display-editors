@@ -1,6 +1,6 @@
 # 1602 — Word wrap, reflow & center
 
-Epic: [[doc/iterations/1600-EPIC-zig-formatting]]
+Epic: [[doc/iterations/x1600-EPIC-zig-formatting]]
 Status: done
 
 ## Progress

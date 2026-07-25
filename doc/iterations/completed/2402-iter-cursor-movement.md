@@ -1,6 +1,6 @@
 # 2402 — Cursor movement
 
-Epic: [[doc/iterations/go/x2400-EPIC-go-core-editing]]
+Epic: [[doc/iterations/x2400-EPIC-go-core-editing]]
 Status: done
 
 ## Progress
@@ -61,7 +61,7 @@ The full WordStar cursor-movement set over the buffer's line/column queries.
   `Run`'s loop, which was verified still fires every iteration.
 
 ## Depends on
-- [[doc/iterations/go/completed/2401-iter-insert-delete-undo]].
+- [[doc/iterations/completed/2401-iter-insert-delete-undo]].
 
 ## References
 - `rust/src/editor.rs` (movement `cmd*`, sticky column). ASM cursor motion

@@ -1,6 +1,6 @@
 # 3002 — Directory view (`^KF`)
 
-Epic: [[doc/iterations/go/x3000-EPIC-go-advanced-deferred]]
+Epic: [[doc/iterations/x3000-EPIC-go-advanced-deferred]]
 Status: done
 
 ## Progress
@@ -30,7 +30,7 @@ keyboard selection. No macros; split-window stays a documented seam.
   `rust/src/screen.rs`); `ListDirectory` tested against a temp dir.
 
 ## Depends on
-- [[doc/iterations/go/x2500-EPIC-go-file-io]].
+- [[doc/iterations/x2500-EPIC-go-file-io]].
 
 ## References
 - `rust/src/screen.rs` (directory helpers), `rust/src/filesystem.rs`.

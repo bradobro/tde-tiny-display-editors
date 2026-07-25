@@ -1,6 +1,6 @@
 # 2401 — Insert, delete & undelete
 
-Epic: [[doc/iterations/go/x2400-EPIC-go-core-editing]]
+Epic: [[doc/iterations/x2400-EPIC-go-core-editing]]
 Status: done
 
 ## Progress
@@ -62,7 +62,7 @@ marked block's offsets stay synced.
   2800).
 
 ## Depends on
-- [[doc/iterations/go/x2300-EPIC-go-screen-loop]], [[doc/iterations/go/x2200-EPIC-go-text-engine]].
+- [[doc/iterations/x2300-EPIC-go-screen-loop]], [[doc/iterations/x2200-EPIC-go-text-engine]].
 
 ## References
 - `rust/src/editor.rs` (insert/delete/undo `cmd*`), `rust/src/block.rs`.

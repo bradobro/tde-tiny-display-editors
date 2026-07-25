@@ -1,6 +1,6 @@
 # 1001 — Spike: macro system feasibility
 
-Epic: [[doc/iterations/1000-EPIC-rust-advanced-deferred]]
+Epic: [[doc/iterations/maybe/1000-EPIC-rust-advanced-deferred]]
 Status: done
 
 ## Progress

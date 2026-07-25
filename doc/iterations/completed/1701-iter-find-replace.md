@@ -1,6 +1,6 @@
 # 1701 — Find & replace command wiring
 
-Epic: [[doc/iterations/1700-EPIC-zig-search]]
+Epic: [[doc/iterations/x1700-EPIC-zig-search]]
 Status: done
 
 ## Progress
@@ -30,7 +30,7 @@ Wire `^QF`/`^QA`/`^L` to the already-implemented `search.zig` engine.
   not-found leaves the buffer unchanged. Leak-free.
 
 ## Depends on
-- [[doc/iterations/1400-EPIC-zig-core-editing]].
+- [[doc/iterations/x1400-EPIC-zig-core-editing]].
 
 ## References
 - `rust/src/search.rs`, `rust/src/editor.rs`. ASM `zde17.asm:3351`.

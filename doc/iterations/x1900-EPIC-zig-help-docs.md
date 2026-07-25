@@ -32,4 +32,4 @@ README).
 
 - ASM `DoMnu`/`HelpY` `zde17.asm:7992`; `Ruler` (`^OT`). `rust/src/help.rs`,
   `rust/README.md`, `doc/MANUAL.md`.
-- Depends on `[[doc/iterations/1600-EPIC-zig-formatting]]`.
+- Depends on `[[doc/iterations/x1600-EPIC-zig-formatting]]`.

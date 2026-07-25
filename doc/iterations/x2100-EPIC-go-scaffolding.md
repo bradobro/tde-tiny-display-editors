@@ -22,8 +22,8 @@ that records the Go-specific decisions.
 
 ## Iterations
 
-- [[doc/iterations/go/completed/2101-iter-scaffold-config]]
-- [[doc/iterations/go/completed/2102-choice-backend-design]]
+- [[doc/iterations/completed/2101-iter-scaffold-config]]
+- [[doc/iterations/completed/2102-choice-backend-design]]
 
 ## Exit criteria
 

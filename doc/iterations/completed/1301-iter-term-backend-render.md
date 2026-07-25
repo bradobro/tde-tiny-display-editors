@@ -1,6 +1,6 @@
 # 1301 — Terminal backend & text-area render
 
-Epic: [[doc/iterations/1300-EPIC-zig-screen-loop]]
+Epic: [[doc/iterations/x1300-EPIC-zig-screen-loop]]
 Status: done
 
 ## Progress

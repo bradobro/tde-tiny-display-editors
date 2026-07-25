@@ -23,8 +23,8 @@ of the original, and the heart of the editor.
 
 ## Iterations
 
-- [[doc/iterations/go/completed/2201-iter-gap-buffer-core]]
-- [[doc/iterations/go/completed/2202-iter-line-column-queries]]
+- [[doc/iterations/completed/2201-iter-gap-buffer-core]]
+- [[doc/iterations/completed/2202-iter-line-column-queries]]
 
 ## Exit criteria
 

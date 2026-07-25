@@ -16,7 +16,7 @@ Find, replace, and repeat — the `^QF`/`^QA`/`^L` commands over the already-don
 
 ## Iterations
 
-- [[doc/iterations/go/completed/2701-iter-find-replace]]
+- [[doc/iterations/completed/2701-iter-find-replace]]
 
 ## Exit criteria
 

@@ -1,6 +1,6 @@
 # 1402 — Cursor movement
 
-Epic: [[doc/iterations/1400-EPIC-zig-core-editing]]
+Epic: [[doc/iterations/x1400-EPIC-zig-core-editing]]
 Status: done
 
 ## Progress

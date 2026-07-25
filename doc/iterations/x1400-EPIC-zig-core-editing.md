@@ -37,4 +37,4 @@ buffer primitives so the marked block's offsets stay correct.
 
 - ASM edit/movement handlers around `zde17.asm:1937`-`2224`.
 - `rust/src/editor.rs` (`cmd_*` handlers, `place_cursor`, `target_col`).
-- Depends on `[[doc/iterations/1300-EPIC-zig-screen-loop]]`.
+- Depends on `[[doc/iterations/x1300-EPIC-zig-screen-loop]]`.

@@ -1,6 +1,6 @@
 # 1302 — Status line & ruler
 
-Epic: [[doc/iterations/1300-EPIC-zig-screen-loop]]
+Epic: [[doc/iterations/x1300-EPIC-zig-screen-loop]]
 Status: done
 
 ## Progress

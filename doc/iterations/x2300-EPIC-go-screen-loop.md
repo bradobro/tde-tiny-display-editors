@@ -25,9 +25,9 @@ improvement over the Rust version.
 
 ## Iterations
 
-- [[doc/iterations/go/completed/2301-iter-term-backend-render]]
-- [[doc/iterations/go/completed/2302-iter-status-and-ruler]]
-- [[doc/iterations/go/completed/2303-iter-main-loop-dispatch]]
+- [[doc/iterations/completed/2301-iter-term-backend-render]]
+- [[doc/iterations/completed/2302-iter-status-and-ruler]]
+- [[doc/iterations/completed/2303-iter-main-loop-dispatch]]
 
 ## Exit criteria
 

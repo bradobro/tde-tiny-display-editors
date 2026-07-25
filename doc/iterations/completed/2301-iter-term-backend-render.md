@@ -1,6 +1,6 @@
 # 2301 — Terminal backend & text-area render
 
-Epic: [[doc/iterations/go/x2300-EPIC-go-screen-loop]]
+Epic: [[doc/iterations/x2300-EPIC-go-screen-loop]]
 Status: done
 
 ## Progress
@@ -38,7 +38,7 @@ so a frame can be built in memory and written in one syscall.
 - `TermScreen` itself is the manual-smoke seam (like Rust's crossterm arm).
 
 ## Depends on
-- [[doc/iterations/go/x2200-EPIC-go-text-engine]], `[[doc/adr/0003-reserved-control-keys]]`,
+- [[doc/iterations/x2200-EPIC-go-text-engine]], `[[doc/adr/0003-reserved-control-keys]]`,
   `[[doc/adr/0008-go-xterm-ansi-backend]]`.
 
 ## References

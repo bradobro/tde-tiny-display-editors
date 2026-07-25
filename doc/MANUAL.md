@@ -1,10 +1,10 @@
 # ZDE Manual
 
-Command reference for the ZDE ports of ZDE/VDE, a WordStar-style editor.
-Commands are common to both the Rust port (`rust/`) and the Zig port
-(`zig/`), grouped by prefix family, matching the original's `Prefix`
-dispatch (`zde17.asm:676`) and each port's `dispatch`/`dispatch_block`/
-`dispatch_quick`/`dispatch_onscreen` tables (`src/editor.rs`).
+Command reference for ZDE 1.7, a WordStar-style full-screen editor for CP/M,
+as reconstituted in Z80 assembly (`doc/research/zde/zde17.asm`). This
+describes how the original works and what every port aims to behave like.
+Each port's own `README.md` (`rust/`, `zig/`, `go/`) notes where that port
+departs from or omits what's described here.
 
 Notation: `^X` means Control-X. `ESC` is a synonym prefix for the `^K` block
 family (press ESC, then a block-family key).
@@ -28,8 +28,7 @@ Format: `NAME*  Pg 1  Ln 1  Cl 51  INS AI DS VT HCR`
 
 The `AI`/`DS`/`VT`/`HCR` letters only appear when that toggle is on.
 
-Cursor: the Go and Zig ports draw a visible block caret; the Rust port hides
-the terminal cursor and relies on the status line's `Ln`/`Cl` fields instead.
+The ordinary terminal cursor sits at the edit position (`Ln`/`Cl`) throughout.
 
 ## Ruler
 
@@ -64,7 +63,7 @@ No prefix — typed directly.
 | `^K` | block prefix (see below) |
 | `^L` / `^\` | repeat last find |
 | `^O` | onscreen prefix (see below) |
-| `^P` | literal control character (not supported — reports "literal control char") |
+| `^P` | literal control character (insert the next control byte verbatim) |
 | `^Q` | quick prefix (see below) |
 | `^T` | delete word |
 | `^U` | undelete (restores the last deletion) |
@@ -92,7 +91,7 @@ No prefix — typed directly.
 | `^KQ` | quit (prompts to discard unsaved changes) |
 | `^KF` | directory view: list files in the current directory, arrows to move, Enter to load, Esc to cancel |
 | `^KH` | show block-menu help |
-| `^KP` | printing — dropped, not ported (see "Differences from the original" in README.md) |
+| `^KP` | print the buffer (or, with a block marked, just the block) to the printer, honoring page length and margins |
 | `ESC` / `Space` (as the second key) | cancel, no-op |
 
 ## Quick commands (`^Q`)
@@ -132,20 +131,24 @@ Toggles and layout.
 | `^ON` | clear a variable tab stop |
 | `^OD` | toggle showing hard carriage returns |
 | `Up` | make the current line the top of the screen |
-| `^OH` | hyphenation — dropped, not ported |
-| `^OJ` | proportional spacing — dropped, not ported |
-| `^OP` | printer page format — dropped, not ported |
-| `^OW` | split window — deferred, not yet ported (spike done, see `doc/iterations/1003-spike-windowing.md`) |
+| `^OH` | toggle automatic hyphenation during reformat/wordwrap |
+| `^OJ` | toggle proportional-spacing microjustification (daisy-wheel/PS printers) |
+| `^OP` | set printer page length |
+| `^OW` | toggle split screen: shrinks the text area and reserves the freed rows below a separator line for a second, static view |
 | `ESC` / `Space` (as the second key) | cancel, no-op |
 
-## Not ported
+## Macros
 
-- **Macros** (`ESC M` record, `ESC 0`-`9` play) — deferred, absent from every
-  port so far (Rust and Go alike). A record/replay subset is a proposed,
-  unstarted follow-up; the jump/test/chain/wait "programming language"
-  statements are a permanent no-go. See `doc/iterations/1001-spike-macros.md`.
-- **Split window** (`^OW`) — deferred. Spike recommends a small-to-medium
-  effort port (shrink the text area + static second view); not yet
-  implemented. See `doc/iterations/1003-spike-windowing.md`.
-- **Printing, proportional spacing, hyphenation** — dropped permanently; see
-  README.md and `doc/adr/0004-v1-feature-scope.md`.
+Ten numbered macro slots, `0`-`9`.
+
+| Key | Command |
+|---|---|
+| `ESC M` | record a macro: prompts for a repeat count and a slot, then records keystrokes into it until a repeat/quiet key ends input |
+| `ESC 0`-`9` | play the macro in that slot |
+| `ESC !` | jump to a label byte recorded earlier in the running macro (or to `[`/`]` for top/end of file, `<`/`>` for a bounded left/right loop) |
+| `ESC =` / `ESC ~` | conditional jump: only if the character under the cursor does/doesn't match a given byte |
+| `ESC +` | chain-load a different numbered macro and keep running |
+| `ESC ;` | pause for roughly 1.5 seconds |
+
+The four statements after `ESC 0`-`9` are only meaningful while a macro is
+running — used outside one, each reports "macro must be going".

@@ -18,7 +18,7 @@ UTF-8 decode/encode boundary between the byte world and the `[]rune` buffer.
 
 ## Iterations
 
-- [[doc/iterations/go/completed/2501-iter-load-save-bak]]
+- [[doc/iterations/completed/2501-iter-load-save-bak]]
 
 ## Exit criteria
 

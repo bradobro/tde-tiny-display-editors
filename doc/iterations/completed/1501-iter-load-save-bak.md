@@ -1,6 +1,6 @@
 # 1501 — Load, save, .bak & quit flows
 
-Epic: [[doc/iterations/1500-EPIC-zig-file-io]]
+Epic: [[doc/iterations/x1500-EPIC-zig-file-io]]
 Status: done
 
 ## Progress
@@ -31,7 +31,7 @@ UTF-8 decode/encode boundary.
 - Quit-when-modified prompts; owned `filename` freed on replace and in `deinit`.
 
 ## Depends on
-- [[doc/iterations/1400-EPIC-zig-core-editing]].
+- [[doc/iterations/x1400-EPIC-zig-core-editing]].
 
 ## References
 - `rust/src/filesystem.rs`. Replaces CP/M FCB I/O `zde17.asm:5798`,`6212`.

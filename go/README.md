@@ -6,11 +6,10 @@ implementation in the repo, beside the Rust port (`../rust/`) and the Zig port
 (`../zig/`). See `../doc/MANUAL.md` for the command reference (shared across
 the ports).
 
-**Status:** core v1 complete — editing, file I/O, formatting, search &
-replace, block ops, and help/docs (epics 2100–2900). See
-`../doc/iterations/go/` for the plan and per-epic progress; `2100-2900` are
-this port's epics, kept in that directory (not yet merged up a level, and not
-yet reflected in the top-level `all.md`).
+**Status:** feature-complete — editing, file I/O, formatting, search &
+replace, block ops, help/docs, and the `^KF` directory view (epics
+2100–3000). No macros; split-window is a documented seam only. See
+`../doc/iterations/all.md` for the plan.
 
 ## Build & run
 
@@ -40,7 +39,25 @@ and rebuild — see `../doc/adr/0006-config-hardcoded-struct.md` for why this
 port deliberately does not reproduce the original's self-modifying-executable
 installer.
 
-## How this port differs from the Rust one
+## Differences from the original
+
+- **Cursor.** Shows a visible caret at the edit position (hidden only for the
+  span of a redraw), matching the original's behavior.
+- **Directory view (`^KF`).** Lists files only (no subdirectories — the
+  original's namespace was flat, CP/M had none to browse), sorted by name,
+  with an optional hidden-file toggle (`Config.ShowHiddenFiles`) standing in
+  for the original's `DirSys` flag.
+- **Macros (`ESC M`, `ESC 0`-`9`).** Not ported — see
+  `../doc/iterations/maybe/1001-spike-macros.md`.
+- **Split window (`^OW`).** Not ported. A feasibility spike
+  (`../doc/iterations/maybe/1003-spike-windowing.md`) found the original
+  shrinks the text area and draws a static second view below a separator,
+  rather than two independently scrollable panes; this port leaves that as a
+  documented seam without implementing the toggle.
+- **Dropped permanently:** printing and print page formatting, proportional
+  spacing, and hyphenation — see `../doc/adr/0004-v1-feature-scope.md`.
+
+## Implementation notes (vs. the Rust port)
 
 Recorded in `../doc/adr/0008-go-xterm-ansi-backend.md`:
 
@@ -54,10 +71,6 @@ Recorded in `../doc/adr/0008-go-xterm-ansi-backend.md`:
 - **The gap buffer stores `[]rune`** (decoded Unicode code points; `rune` is
   Go's alias for `int32`), the analog of Rust's `Vec<char>` and Zig's `[]u21` —
   no routine reasons about UTF-8 byte boundaries.
-- **A visible text cursor.** The Rust port hides the terminal cursor; this port
-  shows a caret at the edit position (hidden only for the span of a redraw).
-- **No macros.** Deferred in every port so far, Rust included. The `^KF`
-  directory view is kept; split-window is a documented seam only.
 - **No manual memory.** The garbage collector owns the buffer store, filename,
   message, query, and undo span — none of the Zig port's `deinit`/free-on-replace
   bookkeeping.

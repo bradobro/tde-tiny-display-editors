@@ -1,6 +1,6 @@
 # 2303 — Main loop, key parsing & dispatch (visible cursor)
 
-Epic: [[doc/iterations/go/x2300-EPIC-go-screen-loop]]
+Epic: [[doc/iterations/x2300-EPIC-go-screen-loop]]
 Status: done
 
 ## Progress
@@ -44,8 +44,8 @@ families), and redraw with a **visible, flicker-free caret**.
   restore on exit and on a forced panic.
 
 ## Depends on
-- [[doc/iterations/go/completed/2301-iter-term-backend-render]],
-  [[doc/iterations/go/completed/2302-iter-status-and-ruler]].
+- [[doc/iterations/completed/2301-iter-term-backend-render]],
+  [[doc/iterations/completed/2302-iter-status-and-ruler]].
 
 ## References
 - ASM `Ready:` `zde17.asm:379`, `Case` `1826`, `AdjKey` `924`.

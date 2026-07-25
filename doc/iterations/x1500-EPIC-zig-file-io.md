@@ -31,4 +31,4 @@ UTF-8 bytes are decoded into the buffer's `[]u21` and encoded back out.
 
 - Replaces CP/M FCB I/O, `zde17.asm:5798`. `rust/src/filesystem.rs`.
 - UTF-8 boundary per `[[doc/adr/0005-buffer-data-structure]]`.
-- Depends on `[[doc/iterations/1400-EPIC-zig-core-editing]]`.
+- Depends on `[[doc/iterations/x1400-EPIC-zig-core-editing]]`.

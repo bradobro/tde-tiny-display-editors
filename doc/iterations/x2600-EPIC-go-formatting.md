@@ -19,8 +19,8 @@ reformatter arithmetic minus soft-space compression and minus hyphenation.
 
 ## Iterations
 
-- [[doc/iterations/go/completed/2601-iter-tabs-margins-columns]]
-- [[doc/iterations/go/completed/2602-iter-wordwrap-reform-center]]
+- [[doc/iterations/completed/2601-iter-tabs-margins-columns]]
+- [[doc/iterations/completed/2602-iter-wordwrap-reform-center]]
 
 ## Exit criteria
 

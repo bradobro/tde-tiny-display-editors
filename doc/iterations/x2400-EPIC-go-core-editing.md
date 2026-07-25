@@ -20,8 +20,8 @@ buffer primitives so the block marks stay synced.
 
 ## Iterations
 
-- [[doc/iterations/go/completed/2401-iter-insert-delete-undo]]
-- [[doc/iterations/go/completed/2402-iter-cursor-movement]]
+- [[doc/iterations/completed/2401-iter-insert-delete-undo]]
+- [[doc/iterations/completed/2402-iter-cursor-movement]]
 
 ## Exit criteria
 

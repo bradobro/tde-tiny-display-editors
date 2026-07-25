@@ -30,7 +30,7 @@ keyboard selection. No macros; split-window stays a documented seam.
   `rust/src/screen.rs`); `listDirectory` tested against a temp dir.
 
 ## Depends on
-- [[doc/iterations/1500-EPIC-zig-file-io]].
+- [[doc/iterations/x1500-EPIC-zig-file-io]].
 
 ## References
 - `rust/src/screen.rs` (directory helpers), `rust/src/filesystem.rs`.

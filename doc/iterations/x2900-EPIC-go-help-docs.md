@@ -19,8 +19,8 @@ write `go/README.md`).
 
 ## Iterations
 
-- [[doc/iterations/go/completed/2901-iter-help-menus-toggles]]
-- [[doc/iterations/go/completed/2902-iter-manual-readme]]
+- [[doc/iterations/completed/2901-iter-help-menus-toggles]]
+- [[doc/iterations/completed/2902-iter-manual-readme]]
 
 ## Exit criteria
 
