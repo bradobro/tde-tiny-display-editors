@@ -28,6 +28,7 @@ const config = @import("config.zig");
 const editor = @import("editor.zig");
 const screen_mod = @import("screen.zig");
 const keyboard = @import("keyboard.zig");
+const filesystem = @import("filesystem.zig");
 
 /// A panic unwinds straight past `defer screen.leave()`, so this is the only
 /// chance to leave the alternate screen and restore `termios` before the
@@ -39,15 +40,21 @@ fn panicHandler(msg: []const u8, ret_addr: ?usize) noreturn {
 }
 pub const panic = std.debug.FullPanic(panicHandler);
 
-pub fn main() !void {
+/// `init.args` (0.16's replacement for `std.process.argsAlloc`) hands us
+/// argv without our gpa: an optional filename argument loads that file (ASM
+/// `Edit`/`LoadIt`, `zde17.asm:334`,`6212`); no arg starts a blank, unnamed
+/// buffer.
+pub fn main(init: std.process.Init.Minimal) !void {
     var gpa: std.heap.DebugAllocator(.{}) = .init;
     defer _ = gpa.deinit();
     const alloc = gpa.allocator();
 
-    // TODO(epic 1500): argv filename -> load into the buffer (ASM `Edit`/`LoadIt`,
-    //   `zde17.asm:334`,`6212`); no arg starts a blank, unnamed buffer.
     var ed = editor.Editor.init(alloc, config.Config{});
     defer ed.deinit();
+
+    var arg_it = init.args.iterate();
+    _ = arg_it.next(); // argv[0]: the program name, not a file to load
+    if (arg_it.next()) |path| try filesystem.loadInto(&ed, path);
 
     var term_screen = screen_mod.TermScreen.init(alloc);
     defer term_screen.deinit();

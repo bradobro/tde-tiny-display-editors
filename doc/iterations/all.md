@@ -53,7 +53,7 @@ How this port differs from the Rust one (see ADR 0007):
 - ✅ [[doc/iterations/x1200-EPIC-zig-text-engine]] — the gap-buffer text engine over `[]u21`
 - ✅ [[doc/iterations/1300-EPIC-zig-screen-loop]] — ANSI backend, render, status line, main loop + visible cursor
 - ✅ [[doc/iterations/1400-EPIC-zig-core-editing]] — insert/delete/undo + cursor movement
-- ⬜ [[doc/iterations/1500-EPIC-zig-file-io]] — load/save/.bak/change-name/quit
+- ✅ [[doc/iterations/1500-EPIC-zig-file-io]] — load/save/.bak/change-name/quit
 - ⬜ [[doc/iterations/1600-EPIC-zig-formatting]] — wordwrap, reformat, margins, tabs, center
 - ⬜ [[doc/iterations/1700-EPIC-zig-search]] — find/replace/repeat
 - ⬜ [[doc/iterations/1800-EPIC-zig-block-ops]] — block mark/copy/move/erase/read/write
@@ -83,7 +83,7 @@ How this port differs from the Rust one (see ADR 0007):
 
 ### Zig: 1500 — File I/O
 
-- ⬜ [[doc/iterations/1501-iter-load-save-bak]] — argv filename, UTF-8 load, save, `.bak`, change-name, quit/exit/done
+- ✅ [[doc/iterations/completed/1501-iter-load-save-bak]] — argv filename, UTF-8 load, save, `.bak`, change-name, quit/exit/done
 
 ### Zig: 1600 — Formatting
 

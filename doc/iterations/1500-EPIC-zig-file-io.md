@@ -1,6 +1,6 @@
 # Epic 1500 — File I/O (Zig)
 
-Status: ready
+Status: done
 
 ## Goal
 
@@ -20,7 +20,7 @@ UTF-8 bytes are decoded into the buffer's `[]u21` and encoded back out.
 
 ## Iterations
 
-- [[doc/iterations/1501-iter-load-save-bak]]
+- [[doc/iterations/completed/1501-iter-load-save-bak]]
 
 ## Exit criteria
 

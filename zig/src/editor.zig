@@ -34,6 +34,7 @@ const KeySource = @import("keyboard.zig").KeySource;
 const Key = @import("keyboard.zig").Key;
 const help = @import("help.zig");
 const format = @import("format.zig");
+const filesystem = @import("filesystem.zig");
 
 /// Whether typed text pushes existing text right or overwrites it (ASM `InsFlg`,
 /// `zde17.asm:144`; `^V` toggles it).
@@ -346,13 +347,13 @@ pub const Editor = struct {
                 'C' => self.cmdCopyBlock(),
                 'V' => self.cmdMoveBlock(),
                 'Y' => self.cmdEraseBlock(),
-                'R' => self.cmdUnsupported("read file at cursor"), // epic 1500
-                'W' => self.cmdUnsupported("write block to file"), // epic 1500
-                'L' => self.cmdUnsupported("load file"), // epic 1500
-                'S' => self.cmdUnsupported("save file"), // epic 1500
+                'R' => self.cmdUnsupported("read file at cursor"), // epic 1800
+                'W' => self.cmdUnsupported("write block to file"), // epic 1800
+                'L' => self.cmdLoad(keys, screen),
+                'S' => self.cmdSave(),
                 'N' => self.cmdChangeName(keys, screen),
-                'X' => self.cmdUnsupported("save and exit"), // epic 1500
-                'D' => self.cmdUnsupported("save as new file"), // epic 1500
+                'X' => self.cmdSaveExit(),
+                'D' => self.cmdSaveNew(keys, screen),
                 'Q' => self.cmdQuit(keys, screen),
                 'F' => self.cmdDeferred("directory view"),
                 'P' => self.cmdDropped("printing"),
@@ -1052,24 +1053,83 @@ pub const Editor = struct {
         return self.runFind();
     }
 
-    /// Change the target filename without saving (`^K N`).
-    fn cmdChangeName(self: *Self, keys: KeySource, screen: Screen) !CommandResult {
-        const name_cps = (try self.readLine(screen, keys, "Name: ")) orelse return .cont;
-        defer self.alloc.free(name_cps);
+    /// Prompt for a line and UTF-8 encode it into an owned path string, or
+    /// `null` if the user cancels (Esc). Shared by every command that reads
+    /// a filename (`^K N`/`^K L`/`^K D`); caller frees the result.
+    fn readPathLine(self: *Self, screen: Screen, keys: KeySource, prompt: []const u8) !?[]u8 {
+        const cps = (try self.readLine(screen, keys, prompt)) orelse return null;
+        defer self.alloc.free(cps);
         var out: std.ArrayList(u8) = .empty;
         errdefer out.deinit(self.alloc);
         var enc: [4]u8 = undefined;
-        for (name_cps) |c| {
+        for (cps) |c| {
             const n = std.unicode.utf8Encode(c, &enc) catch continue;
             try out.appendSlice(self.alloc, enc[0..n]);
         }
+        return try out.toOwnedSlice(self.alloc);
+    }
+
+    /// Change the target filename without saving (`^K N` = `ChgNam`,
+    /// `zde17.asm:5011`).
+    fn cmdChangeName(self: *Self, keys: KeySource, screen: Screen) !CommandResult {
+        const path = (try self.readPathLine(screen, keys, "Name: ")) orelse return .cont;
         if (self.filename) |f| self.alloc.free(f);
-        self.filename = try out.toOwnedSlice(self.alloc);
+        self.filename = path;
         return .cont;
     }
 
-    /// Quit, confirming first if there are unsaved changes (`^K Q`). Never
-    /// saves (file I/O lands in epic 1500).
+    /// Save to the current filename, setting `message` either way (ASM
+    /// `Save`, `zde17.asm:4905`). Returns whether it succeeded, so callers
+    /// that chain a save (`^K X`, `^K D`) know whether to continue.
+    fn saveCurrent(self: *Self) !bool {
+        filesystem.save(self) catch |err| {
+            const detail = if (err == error.NoFilename) "no filename set (use ^K N first)" else @errorName(err);
+            try self.setMessage("save failed: {s}", .{detail});
+            return false;
+        };
+        try self.setMessage("saved", .{});
+        return true;
+    }
+
+    /// Save to the current filename (`^K S` = `Save`, `zde17.asm:4905`).
+    fn cmdSave(self: *Self) !CommandResult {
+        _ = try self.saveCurrent();
+        return .cont;
+    }
+
+    /// Save then quit (`^K X` = `Exit`, `zde17.asm:708`). A failed save
+    /// leaves the editor open with the error shown, matching the ASM's
+    /// don't-quit-on-failed-save behavior.
+    fn cmdSaveExit(self: *Self) !CommandResult {
+        return if (try self.saveCurrent()) .quit else .cont;
+    }
+
+    /// Load a different file, discarding the current buffer (`^K L` =
+    /// `Load`, `zde17.asm:4842`). Confirms first if there are unsaved
+    /// changes; Esc at either prompt cancels and leaves the current file
+    /// untouched.
+    fn cmdLoad(self: *Self, keys: KeySource, screen: Screen) !CommandResult {
+        if (self.modified and !(try self.confirm(screen, keys, "Abandon changes? (Y/N):"))) {
+            return self.setMessageResult("load cancelled");
+        }
+        const path = (try self.readPathLine(screen, keys, "Load: ")) orelse return self.setMessageResult("load cancelled");
+        defer self.alloc.free(path);
+        try filesystem.loadInto(self, path);
+        return .cont;
+    }
+
+    /// Save, then start a new file (`^K D` = `Done`, `zde17.asm:714`). Only
+    /// prompts for the new name once the save has actually succeeded.
+    fn cmdSaveNew(self: *Self, keys: KeySource, screen: Screen) !CommandResult {
+        if (!(try self.saveCurrent())) return .cont;
+        const path = (try self.readPathLine(screen, keys, "New file: ")) orelse return .cont;
+        defer self.alloc.free(path);
+        try filesystem.loadInto(self, path);
+        return .cont;
+    }
+
+    /// Quit, confirming first if there are unsaved changes (`^K Q` = `Quit`,
+    /// `zde17.asm:720`). Never saves.
     fn cmdQuit(self: *Self, keys: KeySource, screen: Screen) !CommandResult {
         if (self.modified and !(try self.confirm(screen, keys, "Abandon changes? (Y/N):"))) return .cont;
         return .quit;
@@ -1324,4 +1384,168 @@ test "run: quit without ^K prefix leaves the loop running (unsupported ctrl fall
     };
     try runScript(&ed, &script);
     try testing.expect(ed.message == null); // cleared at the top of the next loop
+}
+
+// --- file I/O command wiring (epic 1500) --------------------------------
+
+/// A unique scratch path per test (keyed by test name + pid), cleaned up on
+/// `deinit` so a failed assertion doesn't litter `/tmp`. Names never contain
+/// a `.`, so the `.bak` sibling is always a plain append (matches
+/// `filesystem.zig`'s own `bakPath` for the no-extension case).
+const TempPath = struct {
+    path: []const u8,
+    bak: []const u8,
+    alloc: std.mem.Allocator,
+
+    fn init(alloc: std.mem.Allocator, name: []const u8) !TempPath {
+        const path = try std.fmt.allocPrint(alloc, "/tmp/zde-zig-editor-test-{s}-{d}", .{ name, std.c.getpid() });
+        errdefer alloc.free(path);
+        const bak = try std.fmt.allocPrint(alloc, "{s}.bak", .{path});
+        return .{ .path = path, .bak = bak, .alloc = alloc };
+    }
+
+    fn deinit(self: TempPath) void {
+        const dir = std.Io.Dir.cwd();
+        const io_ctx = std.Io.Threaded.global_single_threaded.io();
+        dir.deleteFile(io_ctx, self.path) catch {};
+        dir.deleteFile(io_ctx, self.bak) catch {};
+        self.alloc.free(self.path);
+        self.alloc.free(self.bak);
+    }
+};
+
+/// Append keys that type `text` as document content (no trailing Enter).
+fn appendChars(list: *std.ArrayList(Key), alloc: std.mem.Allocator, text: []const u8) !void {
+    for (text) |c| try list.append(alloc, .{ .char = c });
+}
+
+/// Append keys that type `text` then Enter, accepting a `readLine` prompt
+/// (e.g. the "Name:"/"Load:" filename prompts).
+fn appendPromptAnswer(list: *std.ArrayList(Key), alloc: std.mem.Allocator, text: []const u8) !void {
+    try appendChars(list, alloc, text);
+    try list.append(alloc, .{ .char = '\r' });
+}
+
+test "run: ^K N sets filename, replacing it without leaking on a second call" {
+    var ed = Editor.init(testing.allocator, .{});
+    defer ed.deinit();
+    var script: std.ArrayList(Key) = .empty;
+    defer script.deinit(testing.allocator);
+    try script.append(testing.allocator, .{ .ctrl = 'K' });
+    try script.append(testing.allocator, .{ .ctrl = 'N' });
+    try appendPromptAnswer(&script, testing.allocator, "first.txt");
+    try script.append(testing.allocator, .{ .ctrl = 'K' });
+    try script.append(testing.allocator, .{ .ctrl = 'N' });
+    try appendPromptAnswer(&script, testing.allocator, "second.txt");
+    try script.append(testing.allocator, .{ .ctrl = 'K' });
+    try script.append(testing.allocator, .{ .ctrl = 'Q' });
+    try runScript(&ed, script.items);
+    try testing.expectEqualStrings("second.txt", ed.filename.?);
+}
+
+test "run: ^K S saves, then a fresh editor's ^K L loads it back" {
+    const tmp = try TempPath.init(testing.allocator, "save-load");
+    defer tmp.deinit();
+
+    var writer = Editor.init(testing.allocator, .{});
+    defer writer.deinit();
+    var save_script: std.ArrayList(Key) = .empty;
+    defer save_script.deinit(testing.allocator);
+    try appendChars(&save_script, testing.allocator, "saved via ^KS");
+    try save_script.append(testing.allocator, .{ .ctrl = 'K' });
+    try save_script.append(testing.allocator, .{ .ctrl = 'N' });
+    try appendPromptAnswer(&save_script, testing.allocator, tmp.path);
+    try save_script.append(testing.allocator, .{ .ctrl = 'K' });
+    try save_script.append(testing.allocator, .{ .ctrl = 'S' });
+    try save_script.append(testing.allocator, .{ .ctrl = 'K' });
+    try save_script.append(testing.allocator, .{ .ctrl = 'Q' });
+    try runScript(&writer, save_script.items);
+
+    var reader = Editor.init(testing.allocator, .{});
+    defer reader.deinit();
+    var load_script: std.ArrayList(Key) = .empty;
+    defer load_script.deinit(testing.allocator);
+    try load_script.append(testing.allocator, .{ .ctrl = 'K' });
+    try load_script.append(testing.allocator, .{ .ctrl = 'L' });
+    try appendPromptAnswer(&load_script, testing.allocator, tmp.path);
+    try load_script.append(testing.allocator, .{ .ctrl = 'K' });
+    try load_script.append(testing.allocator, .{ .ctrl = 'Q' });
+    try runScript(&reader, load_script.items);
+
+    const text = try bufferText(&reader);
+    defer testing.allocator.free(text);
+    try testing.expectEqualStrings("saved via ^KS", text);
+    try testing.expectEqualStrings(tmp.path, reader.filename.?);
+}
+
+test "run: ^K X saves and quits; a second save over the same path creates a .bak" {
+    const tmp = try TempPath.init(testing.allocator, "save-exit-bak");
+    defer tmp.deinit();
+
+    var ed = Editor.init(testing.allocator, .{});
+    defer ed.deinit();
+    var script: std.ArrayList(Key) = .empty;
+    defer script.deinit(testing.allocator);
+    try appendChars(&script, testing.allocator, "v1");
+    try script.append(testing.allocator, .{ .ctrl = 'K' });
+    try script.append(testing.allocator, .{ .ctrl = 'N' });
+    try appendPromptAnswer(&script, testing.allocator, tmp.path);
+    try script.append(testing.allocator, .{ .ctrl = 'K' });
+    try script.append(testing.allocator, .{ .ctrl = 'X' }); // save + quit
+    try runScript(&ed, script.items);
+
+    var ed2 = Editor.init(testing.allocator, .{});
+    defer ed2.deinit();
+    var script2: std.ArrayList(Key) = .empty;
+    defer script2.deinit(testing.allocator);
+    try script2.append(testing.allocator, .{ .ctrl = 'K' });
+    try script2.append(testing.allocator, .{ .ctrl = 'N' });
+    try appendPromptAnswer(&script2, testing.allocator, tmp.path);
+    try script2.append(testing.allocator, .{ .ctrl = 'K' });
+    try script2.append(testing.allocator, .{ .ctrl = 'X' }); // resave same content
+    try runScript(&ed2, script2.items);
+
+    const backed_up = (try filesystem.readFile(testing.allocator, tmp.bak)).?;
+    defer testing.allocator.free(backed_up);
+    try testing.expectEqualSlices(u21, &.{ 'v', '1' }, backed_up);
+}
+
+test "run: ^K D saves the current file, then starts a new named buffer" {
+    const tmp = try TempPath.init(testing.allocator, "save-new");
+    defer tmp.deinit();
+
+    var ed = Editor.init(testing.allocator, .{});
+    defer ed.deinit();
+    var script: std.ArrayList(Key) = .empty;
+    defer script.deinit(testing.allocator);
+    try appendChars(&script, testing.allocator, "old file contents");
+    try script.append(testing.allocator, .{ .ctrl = 'K' });
+    try script.append(testing.allocator, .{ .ctrl = 'N' });
+    try appendPromptAnswer(&script, testing.allocator, tmp.path);
+    try script.append(testing.allocator, .{ .ctrl = 'K' });
+    try script.append(testing.allocator, .{ .ctrl = 'D' }); // save + new
+    try appendPromptAnswer(&script, testing.allocator, "/tmp/zde-zig-editor-test-does-not-exist");
+    try script.append(testing.allocator, .{ .ctrl = 'K' });
+    try script.append(testing.allocator, .{ .ctrl = 'Q' });
+    try runScript(&ed, script.items);
+
+    try testing.expectEqualStrings("/tmp/zde-zig-editor-test-does-not-exist", ed.filename.?);
+    try testing.expect(ed.buffer.isEmpty());
+
+    const saved = (try filesystem.readFile(testing.allocator, tmp.path)).?;
+    defer testing.allocator.free(saved);
+    const saved_text = try codepointsToUtf8(testing.allocator, saved);
+    defer testing.allocator.free(saved_text);
+    try testing.expectEqualStrings("old file contents", saved_text);
+}
+
+fn codepointsToUtf8(alloc: std.mem.Allocator, cps: []const u21) ![]u8 {
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(alloc);
+    var enc: [4]u8 = undefined;
+    for (cps) |c| {
+        const n = try std.unicode.utf8Encode(c, &enc);
+        try out.appendSlice(alloc, enc[0..n]);
+    }
+    return out.toOwnedSlice(alloc);
 }
