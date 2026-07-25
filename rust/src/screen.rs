@@ -32,6 +32,11 @@ pub trait Screen {
     fn leave(&mut self) -> std::io::Result<()>;
     /// Move the cursor to (row, col), 0-based (analog of `GoTo`, `zde17.asm:7039`).
     fn move_to(&mut self, row: u16, col: u16) -> std::io::Result<()>;
+    /// Show or hide the terminal's own cursor. `redraw` hides it before
+    /// repainting the frame and re-shows it once `place_cursor` has moved it
+    /// to the caret, so the visible cursor never flickers mid-redraw (see ADR
+    /// 0007 §4, the design this was ported from).
+    fn show_cursor(&mut self, visible: bool) -> std::io::Result<()>;
     /// Write already-rendered text at the current position.
     fn write_str(&mut self, s: &str) -> std::io::Result<()>;
     /// Clear the current line to end.
@@ -81,7 +86,16 @@ impl Screen for CrosstermScreen {
         // flow-control/signal handling that would otherwise steal ^S/^Q/^C/^Z
         // from the WordStar-style command set.
         terminal::enable_raw_mode()?;
-        execute!(io::stdout(), terminal::EnterAlternateScreen, cursor::Hide)?;
+        // Leave the cursor visible (unlike earlier versions of this port,
+        // which hid it for the whole session — ADR 0007 §4 calls that out as
+        // a gap versus the Zig port). `redraw` toggles visibility per frame
+        // via `show_cursor`. A steady block shape reads clearly as a text
+        // caret rather than the terminal's default blinking bar/underline.
+        execute!(
+            io::stdout(),
+            terminal::EnterAlternateScreen,
+            cursor::SetCursorStyle::SteadyBlock
+        )?;
         self.entered = true;
         Ok(())
     }
@@ -90,7 +104,14 @@ impl Screen for CrosstermScreen {
         if !self.entered {
             return Ok(());
         }
-        execute!(io::stdout(), cursor::Show, terminal::LeaveAlternateScreen)?;
+        // Reset the cursor shape we set in `enter` so the user's normal shell
+        // cursor comes back, not a leftover steady block.
+        execute!(
+            io::stdout(),
+            cursor::Show,
+            cursor::SetCursorStyle::DefaultUserShape,
+            terminal::LeaveAlternateScreen
+        )?;
         terminal::disable_raw_mode()?;
         self.entered = false;
         Ok(())
@@ -98,6 +119,14 @@ impl Screen for CrosstermScreen {
 
     fn move_to(&mut self, row: u16, col: u16) -> io::Result<()> {
         execute!(io::stdout(), cursor::MoveTo(col, row))
+    }
+
+    fn show_cursor(&mut self, visible: bool) -> io::Result<()> {
+        if visible {
+            execute!(io::stdout(), cursor::Show)
+        } else {
+            execute!(io::stdout(), cursor::Hide)
+        }
     }
 
     fn write_str(&mut self, s: &str) -> io::Result<()> {

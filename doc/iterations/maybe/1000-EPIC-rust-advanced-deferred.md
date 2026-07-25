@@ -23,9 +23,10 @@ spacing, hyphenation, and CP/M-specific machinery (Z-System message buffer, driv
 
 ## Iterations
 
-- [[doc/iterations/maybe/1001-spike-macros]]
-- [[doc/iterations/maybe/1002-iter-directory-view]]
-- [[doc/iterations/maybe/1003-spike-windowing]]
+- [[doc/iterations/1001-spike-macros]]
+- [[doc/iterations/1002-iter-directory-view]]
+- [[doc/iterations/1003-spike-windowing]]
+- [[doc/iterations/1004-iter-visible-cursor]]
 
 ## Exit criteria
 
@@ -45,6 +46,9 @@ spacing, hyphenation, and CP/M-specific machinery (Z-System message buffer, driv
   panes" the original scope wording implied but the ASM doesn't clearly
   support. Proposed follow-up: `iter-split-window` (not yet created —
   awaiting go-ahead).
+- [[doc/iterations/1004-iter-visible-cursor]] — **done**: ported the Zig
+  port's visible-cursor fix (ADR 0007 §4) back to Rust — the terminal
+  cursor is no longer permanently hidden.
 
 ## References
 

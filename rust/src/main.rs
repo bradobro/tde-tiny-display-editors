@@ -54,6 +54,7 @@ fn install_panic_hook() {
         let _ = crossterm::execute!(
             io::stdout(),
             crossterm::cursor::Show,
+            crossterm::cursor::SetCursorStyle::DefaultUserShape,
             crossterm::terminal::LeaveAlternateScreen
         );
         default_hook(info);

@@ -22,9 +22,10 @@ Legend: ✅ done · ⬜ not done. Trailing parentheticals are color, not status.
 
 ### Rust: 1000 — Advanced / Deferred
 
-- ✅ [[doc/iterations/maybe/1001-spike-macros]] — macro system feasibility spike: partial go (record/replay small effort; language statements no-go); follow-up `iter-macro-record-replay` proposed, not yet created
-- ✅ [[doc/iterations/maybe/1002-iter-directory-view]] — `^KF` directory view, shipped
-- ✅ [[doc/iterations/maybe/1003-spike-windowing]] — split-window feasibility spike: go, small-to-medium effort; follow-up `iter-split-window` proposed, not yet created
+- ✅ [[doc/iterations/1001-spike-macros]] — macro system feasibility spike: partial go (record/replay small effort; language statements no-go); follow-up `iter-macro-record-replay` proposed, not yet created
+- ✅ [[doc/iterations/1002-iter-directory-view]] — `^KF` directory view, shipped
+- ✅ [[doc/iterations/1003-spike-windowing]] — split-window feasibility spike: go, small-to-medium effort; follow-up `iter-split-window` proposed, not yet created
+- ✅ [[doc/iterations/1004-iter-visible-cursor]] — visible text cursor while editing, porting the Zig port's ADR 0007 §4 fix back to Rust
 
 ## Zig Epics
 
@@ -42,7 +43,6 @@ How this port differs from the Rust one (see ADR 0007):
 - **`Screen`/`KeySource` are runtime vtable interfaces** (std.mem.Allocator
   pattern), not comptime generics; `Editor` stays non-generic.
 - **Gap buffer stores `[]u21`** (decoded codepoints), the analog of `Vec<char>`.
-- **Visible text cursor** on the edit screen (the Rust port hides it).
 - **We own escape-sequence parsing** (crossterm did it for Rust) — the biggest
   net-new code.
 - **No macros.** `^KF` directory view kept; split-window is a seam only.
