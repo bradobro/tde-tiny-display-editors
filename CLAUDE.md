@@ -1,5 +1,7 @@
 # ZDE
 
+Use the iteration skill for planning if it is available.
+
 Rust port of VDE, a historic DOS/CP-M text editor, via a reconstituted Z80
 source (ZDE). Goal: a minimal editor — the original VDE `.com` was ~17k.
 Currently ~662k as of epic 9: not minimal, but handles ANSI terminals
@@ -17,7 +19,7 @@ The Rust port lives in `rust/`. **The plan is in `doc/iterations/`**,
 starting at `doc/iterations/all.md`; architecture decisions are in
 `doc/adr/` — don't write code that depends on a Proposed ADR until it's
 Accepted. The map of `zde17.asm` is
-`doc/iterations/0101-spike-asm-architecture.md`; extend it when you dig into
+`doc/iterations/completed/0101-spike-asm-architecture.md`; extend it when you dig into
 a routine it doesn't cover yet. Work an iteration at a time; keep each
 iteration file updated as the living record of intent and progress.
 
