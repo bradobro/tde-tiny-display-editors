@@ -58,7 +58,7 @@ How this port differs from the Rust one (see ADR 0007):
 - ✅ [[doc/iterations/1700-EPIC-zig-search]] — find/replace/repeat
 - ✅ [[doc/iterations/1800-EPIC-zig-block-ops]] — block mark/copy/move/erase/read/write
 - ✅ [[doc/iterations/1900-EPIC-zig-help-docs]] — help menus, toggles, MANUAL edits, README
-- ⬜ [[doc/iterations/2000-EPIC-zig-advanced-deferred]] — directory view; windowing seam (no macros)
+- ✅ [[doc/iterations/2000-EPIC-zig-advanced-deferred]] — directory view; windowing seam (no macros)
 
 ### Zig: 1100 — Scaffolding & Decisions
 
@@ -105,4 +105,4 @@ How this port differs from the Rust one (see ADR 0007):
 
 ### Zig: 2000 — Advanced (mostly deferred)
 
-- ⬜ [[doc/iterations/2002-iter-directory-view]] — `^KF` directory picker (grid, files only). No macros; split-window seam only.
+- ✅ [[doc/iterations/completed/2002-iter-directory-view]] — `^KF` directory picker (grid, files only). No macros; split-window seam only.

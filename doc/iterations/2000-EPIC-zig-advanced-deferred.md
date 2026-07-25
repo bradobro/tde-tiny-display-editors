@@ -1,6 +1,6 @@
 # Epic 2000 — Advanced (mostly deferred) (Zig)
 
-Status: ready
+Status: done
 
 ## Goal
 
@@ -19,7 +19,7 @@ Rust epic-1000 macro spike is skipped entirely here.
 
 ## Iterations
 
-- [[doc/iterations/2002-iter-directory-view]]
+- [[doc/iterations/completed/2002-iter-directory-view]]
 
 ## Exit criteria
 

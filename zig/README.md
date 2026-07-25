@@ -6,10 +6,10 @@ the third implementation in the repo, beside the Rust port (`../rust/`) and a
 planned Go port. See `../doc/MANUAL.md` for the command reference (shared across
 the ports).
 
-**Status:** core v1 feature-complete — editing, file I/O, formatting, search,
-block operations, and help/docs (epics 1100–1900). The `^KF` directory view
-and a split-window seam remain (epic 2000). See `../doc/iterations/all.md` for
-the plan.
+**Status:** feature-complete — editing, file I/O, formatting, search, block
+operations, help/docs, and the `^KF` directory view (epics 1100–2000). No
+macros; split-window is a documented seam only. See
+`../doc/iterations/all.md` for the plan.
 
 ## Build & run
 
@@ -55,8 +55,7 @@ Recorded in `../doc/adr/0007-zig-raw-ansi-backend.md`:
 - **A visible text cursor.** The Rust port hides the terminal cursor; this port
   shows a caret at the edit position (hidden only for the span of a redraw).
 - **No macros.** Not ported in either port (see `../doc/iterations/1001-spike-macros.md`).
-  The `^KF` directory view is planned (epic 2000); split-window is a
-  documented seam only.
+  The `^KF` directory view is shipped; split-window is a documented seam only.
 - **Manual memory management.** One `std.mem.Allocator` is threaded through the
   `Editor`; owned state (buffer store, filename, message, query, undo span) is
   freed explicitly. Tests run under `std.testing.allocator` to catch leaks.

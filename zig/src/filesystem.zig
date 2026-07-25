@@ -153,6 +153,43 @@ pub fn readFileAtCursor(editor: *Editor, path: []const u8) !void {
     if (codepoints.len > 0) editor.modified = true;
 }
 
+/// List regular files in `dir`, sorted by name (`^KF` = `Dir`, `zde17.asm:4663`).
+/// Subdirectories are skipped: CP/M had no subdirectories to browse into, and
+/// this port doesn't add nested navigation (see iteration 2002's scope
+/// notes). Dotfiles are skipped unless `show_hidden` is set, standing in for
+/// the original's `DirSys` flag (`zde17.asm:153`). Caller owns the returned
+/// slice and its strings — free with `freeDirectoryListing`.
+pub fn listDirectory(alloc: Allocator, path: []const u8, show_hidden: bool) ![][]u8 {
+    var dir = try std.Io.Dir.cwd().openDir(io(), path, .{ .iterate = true });
+    defer dir.close(io());
+
+    var names: std.ArrayList([]u8) = .empty;
+    errdefer {
+        for (names.items) |n| alloc.free(n);
+        names.deinit(alloc);
+    }
+    var it = dir.iterate();
+    while (try it.next(io())) |entry| {
+        if (entry.kind != .file) continue;
+        if (!show_hidden and entry.name.len > 0 and entry.name[0] == '.') continue;
+        try names.append(alloc, try alloc.dupe(u8, entry.name));
+    }
+
+    const owned = try names.toOwnedSlice(alloc);
+    std.mem.sort([]u8, owned, {}, struct {
+        fn lessThan(_: void, a: []u8, b: []u8) bool {
+            return std.mem.order(u8, a, b) == .lt;
+        }
+    }.lessThan);
+    return owned;
+}
+
+/// Free a listing returned by `listDirectory`.
+pub fn freeDirectoryListing(alloc: Allocator, names: [][]u8) void {
+    for (names) |n| alloc.free(n);
+    alloc.free(names);
+}
+
 // --- tests ---------------------------------------------------------------
 
 const testing = std.testing;
@@ -333,6 +370,60 @@ test "save writes the buffer and clears modified; errors with no filename" {
     const expected = try codepointSlice(testing.allocator, "saved text");
     defer testing.allocator.free(expected);
     try testing.expectEqualSlices(u21, expected, written);
+}
+
+/// A unique scratch directory per test (keyed by test name + pid), cleaned
+/// up on `deinit` so a failed assertion doesn't litter the temp dir.
+const TempDir = struct {
+    path: []const u8,
+    alloc: Allocator,
+
+    fn init(alloc: Allocator, name: []const u8) !TempDir {
+        const path = try std.fmt.allocPrint(alloc, "/tmp/zde-zig-fs-test-dir-{s}-{d}", .{ name, std.c.getpid() });
+        try std.Io.Dir.cwd().createDirPath(io(), path);
+        return .{ .path = path, .alloc = alloc };
+    }
+
+    fn deinit(self: TempDir) void {
+        std.Io.Dir.cwd().deleteTree(io(), self.path) catch {};
+        self.alloc.free(self.path);
+    }
+};
+
+test "listDirectory lists files sorted and skips subdirs" {
+    const d = try TempDir.init(testing.allocator, "listing");
+    defer d.deinit();
+    var dir = try std.Io.Dir.cwd().openDir(io(), d.path, .{});
+    defer dir.close(io());
+    try dir.writeFile(io(), .{ .sub_path = "b.txt", .data = "" });
+    try dir.writeFile(io(), .{ .sub_path = "a.txt", .data = "" });
+    try dir.createDir(io(), "subdir", .default_dir);
+
+    const names = try listDirectory(testing.allocator, d.path, false);
+    defer freeDirectoryListing(testing.allocator, names);
+    try testing.expectEqual(@as(usize, 2), names.len);
+    try testing.expectEqualStrings("a.txt", names[0]);
+    try testing.expectEqualStrings("b.txt", names[1]);
+}
+
+test "listDirectory skips hidden entries unless shown" {
+    const d = try TempDir.init(testing.allocator, "hidden");
+    defer d.deinit();
+    var dir = try std.Io.Dir.cwd().openDir(io(), d.path, .{});
+    defer dir.close(io());
+    try dir.writeFile(io(), .{ .sub_path = ".secret", .data = "" });
+    try dir.writeFile(io(), .{ .sub_path = "visible.txt", .data = "" });
+
+    const shown = try listDirectory(testing.allocator, d.path, false);
+    defer freeDirectoryListing(testing.allocator, shown);
+    try testing.expectEqual(@as(usize, 1), shown.len);
+    try testing.expectEqualStrings("visible.txt", shown[0]);
+
+    const all = try listDirectory(testing.allocator, d.path, true);
+    defer freeDirectoryListing(testing.allocator, all);
+    try testing.expectEqual(@as(usize, 2), all.len);
+    try testing.expectEqualStrings(".secret", all[0]);
+    try testing.expectEqualStrings("visible.txt", all[1]);
 }
 
 /// Test-only helper mirroring `editor.zig`'s own `bufferText`: encode the

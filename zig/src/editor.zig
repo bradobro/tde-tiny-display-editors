@@ -355,7 +355,7 @@ pub const Editor = struct {
                 'X' => self.cmdSaveExit(),
                 'D' => self.cmdSaveNew(keys, screen),
                 'Q' => self.cmdQuit(keys, screen),
-                'F' => self.cmdDeferred("directory view"),
+                'F' => self.cmdDirectoryView(keys, screen),
                 'P' => self.cmdDropped("printing"),
                 else => self.cmdUnsupported("block command"),
             },
@@ -411,6 +411,10 @@ pub const Editor = struct {
                 'H' => self.cmdDropped("hyphenation"),
                 'J' => self.cmdDropped("proportional spacing"),
                 'P' => self.cmdDropped("printer page format"),
+                // Split window (`^OW`) is a documented seam only (epic 2000
+                // scope): the hook would be a second `top_offset`/`textAreaTop`
+                // pair sharing a shrunk text area, per the Rust spike
+                // (`doc/iterations/1003-spike-windowing.md`). Not implemented.
                 'W' => self.cmdDeferred("split window"),
                 else => self.cmdUnsupported("onscreen command"),
             },
@@ -1314,6 +1318,76 @@ pub const Editor = struct {
         return .cont;
     }
 
+    /// `^KF` — browse the current directory and load a chosen file (ASM
+    /// `Dir`, `zde17.asm:4663`). Lists files only (no subdirectory
+    /// navigation — see `filesystem.listDirectory`); overlays the text area
+    /// with a grid the user steers with the arrow keys. Enter loads the
+    /// selected file (same unsaved-changes guard as `^KL`); Esc cancels back
+    /// to the document with nothing changed.
+    fn cmdDirectoryView(self: *Self, keys: KeySource, screen: Screen) !CommandResult {
+        return self.cmdDirectoryViewIn(".", keys, screen);
+    }
+
+    /// The `^KF` implementation proper, parameterized on the directory to
+    /// browse (`cmdDirectoryView` always passes `.`). Split out so tests can
+    /// point it at a scratch directory instead of the process's real cwd.
+    fn cmdDirectoryViewIn(self: *Self, dir: []const u8, keys: KeySource, screen: Screen) !CommandResult {
+        const names = filesystem.listDirectory(self.alloc, dir, self.cfg.show_hidden_files) catch |err| {
+            try self.setMessage("directory read failed: {s}", .{@errorName(err)});
+            return .cont;
+        };
+        defer filesystem.freeDirectoryListing(self.alloc, names);
+        if (names.len == 0) return self.setMessageResult("directory is empty");
+
+        const chosen = (try self.runDirectoryPicker(names, keys, screen)) orelse return .cont;
+        if (self.modified and !(try self.confirm(screen, keys, "Abandon changes? (Y/N):"))) {
+            return self.setMessageResult("load cancelled");
+        }
+        const path = try std.fs.path.join(self.alloc, &.{ dir, chosen });
+        defer self.alloc.free(path);
+        try filesystem.loadInto(self, path);
+        return .cont;
+    }
+
+    /// Drive the directory grid until the user picks a file (Enter) or backs
+    /// out (Esc). Kept separate from `cmdDirectoryViewIn` so the picking loop
+    /// itself doesn't tangle with the load/confirm bookkeeping around it.
+    fn runDirectoryPicker(self: *Self, names: [][]u8, keys: KeySource, screen: Screen) !?[]const u8 {
+        const rows: usize = self.cfg.screen_lines;
+        const cols = screen_render.gridCols(names, self.cfg.view_columns);
+        var selected: usize = 0;
+        while (true) {
+            try self.drawDirectoryPage(screen, names, selected, rows);
+            const key = try keys.nextKey();
+            switch (key) {
+                .esc => return null,
+                .char => |c| if (c == '\r') return names[selected],
+                .left, .right, .up, .down => selected = screen_render.moveSelection(selected, names.len, cols, key),
+                else => {},
+            }
+        }
+    }
+
+    /// Paint one page of the directory grid over the text-area rows, plus a
+    /// one-line hint on the message row.
+    fn drawDirectoryPage(self: *Self, screen: Screen, names: [][]u8, selected: usize, rows: usize) !void {
+        const row = self.textAreaTop();
+        var out: std.ArrayList(u8) = .empty;
+        defer out.deinit(self.alloc);
+        try screen_render.renderDirectoryPage(&out, self.alloc, names, selected, rows, self.cfg.view_columns);
+        var it = std.mem.splitScalar(u8, out.items, '\n');
+        var i: usize = 0;
+        while (it.next()) |line| : (i += 1) {
+            try screen.moveTo(@intCast(row + i), 0);
+            try screen.clearLine();
+            try screen.writeStr(line);
+        }
+        try screen.moveTo(@intCast(self.messageRow(row)), 0);
+        try screen.clearLine();
+        try screen.writeStr("Directory: arrows to move, Enter to load, Esc to cancel");
+        try screen.flush();
+    }
+
     /// Quit, confirming first if there are unsaved changes (`^K Q` = `Quit`,
     /// `zde17.asm:720`). Never saves.
     fn cmdQuit(self: *Self, keys: KeySource, screen: Screen) !CommandResult {
@@ -2184,6 +2258,97 @@ test "read file at cursor inserts the file's contents" {
     const text = try bufferText(&ed);
     defer testing.allocator.free(text);
     try testing.expectEqualStrings("aXYZb", text);
+}
+
+// --- `^KF` directory picker (epic 2000) -----------------------------------
+//
+// Per iteration 2002's test plan, the picker-loop tests exercise the
+// selection→path mapping through `runDirectoryPicker` directly rather than
+// driving `cmdDirectoryView`'s real `.` directory listing, so they don't
+// depend on the test runner's cwd; the `cmdDirectoryViewIn` tests point at a
+// scratch directory instead.
+
+/// A unique scratch directory per test, cleaned up on `deinit`.
+const TempTestDir = struct {
+    path: []const u8,
+    alloc: std.mem.Allocator,
+
+    fn init(alloc: std.mem.Allocator, name: []const u8) !TempTestDir {
+        const path = try std.fmt.allocPrint(alloc, "/tmp/zde-zig-editor-test-dir-{s}-{d}", .{ name, std.c.getpid() });
+        try std.Io.Dir.cwd().createDirPath(std.Io.Threaded.global_single_threaded.io(), path);
+        return .{ .path = path, .alloc = alloc };
+    }
+
+    fn deinit(self: TempTestDir) void {
+        std.Io.Dir.cwd().deleteTree(std.Io.Threaded.global_single_threaded.io(), self.path) catch {};
+        self.alloc.free(self.path);
+    }
+
+    fn writeFile(self: TempTestDir, name: []const u8, contents: []const u8) !void {
+        var dir = try std.Io.Dir.cwd().openDir(std.Io.Threaded.global_single_threaded.io(), self.path, .{});
+        defer dir.close(std.Io.Threaded.global_single_threaded.io());
+        try dir.writeFile(std.Io.Threaded.global_single_threaded.io(), .{ .sub_path = name, .data = contents });
+    }
+};
+
+test "directory picker: Enter returns the selected name" {
+    var ed = Editor.init(testing.allocator, .{});
+    defer ed.deinit();
+    var fake = FakeScreen.init(testing.allocator);
+    defer fake.deinit();
+    var names = [_][]u8{ try testing.allocator.dupe(u8, "a.txt"), try testing.allocator.dupe(u8, "b.txt"), try testing.allocator.dupe(u8, "c.txt") };
+    defer for (names) |n| testing.allocator.free(n);
+    var sk = ScriptedKeys.init(&.{ .right, .{ .char = '\r' } });
+    const picked = try ed.runDirectoryPicker(&names, sk.source(), fake.screen());
+    try testing.expectEqualStrings("b.txt", picked.?);
+}
+
+test "directory picker: Esc cancels with no selection" {
+    var ed = Editor.init(testing.allocator, .{});
+    defer ed.deinit();
+    var fake = FakeScreen.init(testing.allocator);
+    defer fake.deinit();
+    var names = [_][]u8{ try testing.allocator.dupe(u8, "a.txt"), try testing.allocator.dupe(u8, "b.txt") };
+    defer for (names) |n| testing.allocator.free(n);
+    var sk = ScriptedKeys.init(&.{ .right, .esc });
+    const picked = try ed.runDirectoryPicker(&names, sk.source(), fake.screen());
+    try testing.expectEqual(@as(?[]const u8, null), picked);
+}
+
+test "directory view reports when the directory is empty" {
+    const dir = try TempTestDir.init(testing.allocator, "kf-empty");
+    defer dir.deinit();
+    var ed = Editor.init(testing.allocator, .{});
+    defer ed.deinit();
+    var fake = FakeScreen.init(testing.allocator);
+    defer fake.deinit();
+    var sk = ScriptedKeys.init(&.{});
+    const result = try ed.cmdDirectoryViewIn(dir.path, sk.source(), fake.screen());
+    try testing.expectEqual(CommandResult.cont, result);
+    try testing.expectEqualStrings("directory is empty", ed.message.?);
+}
+
+test "directory view loads the chosen file" {
+    const dir = try TempTestDir.init(testing.allocator, "kf-pick");
+    defer dir.deinit();
+    try dir.writeFile("alpha.txt", "alpha contents");
+    try dir.writeFile("beta.txt", "beta contents");
+
+    var ed = Editor.init(testing.allocator, .{});
+    defer ed.deinit();
+    var fake = FakeScreen.init(testing.allocator);
+    defer fake.deinit();
+    // Sorted listing is [alpha.txt, beta.txt]; Right then Enter picks beta.txt.
+    var sk = ScriptedKeys.init(&.{ .right, .{ .char = '\r' } });
+    const result = try ed.cmdDirectoryViewIn(dir.path, sk.source(), fake.screen());
+    try testing.expectEqual(CommandResult.cont, result);
+
+    const text = try bufferText(&ed);
+    defer testing.allocator.free(text);
+    try testing.expectEqualStrings("beta contents", text);
+    const expected_name = try std.fs.path.join(testing.allocator, &.{ dir.path, "beta.txt" });
+    defer testing.allocator.free(expected_name);
+    try testing.expectEqualStrings(expected_name, ed.filename.?);
 }
 
 // --- help menus & ruler (epic 1900) ---------------------------------------

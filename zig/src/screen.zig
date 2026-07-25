@@ -23,6 +23,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const buffer = @import("buffer.zig");
 const config = @import("config.zig");
+const keyboard = @import("keyboard.zig");
 
 /// `TIOCGWINSZ` is not exposed by `std.posix` on 0.16 (checked: it is nowhere
 /// in the standard library source) — this is exactly the "fall back to
@@ -352,6 +353,95 @@ pub fn renderHeader(out: *std.ArrayList(u8), alloc: Allocator, info: HeaderInfo)
     }
 }
 
+/// How many grid columns `names` fit into a row `view_columns` wide, for the
+/// `^KF` directory picker (ASM `Dir`, `zde17.asm:4663`). Every cell is padded
+/// to the widest name plus a 2-column gutter (1 for the selection marker, 1
+/// for spacing), so columns stay aligned. Analog of `grid_cols`
+/// (`rust/src/screen.rs:188`).
+pub fn gridCols(names: []const []const u8, view_columns: usize) usize {
+    var widest: usize = 1;
+    for (names) |n| widest = @max(widest, std.unicode.utf8CountCodepoints(n) catch n.len);
+    const col_width = widest + 2;
+    return @max(view_columns / col_width, 1);
+}
+
+/// Move the directory picker's selection by one step in `key`'s direction,
+/// treating `names` as a row-major grid `cols` wide. Movement that would land
+/// past the last entry clamps to it rather than wrapping, so Down/Right at
+/// the edge of a ragged last row just settles on the final file. Analog of
+/// `move_selection` (`rust/src/screen.rs:197`).
+pub fn moveSelection(selected: usize, len: usize, cols: usize, key: keyboard.Key) usize {
+    if (len == 0) return 0;
+    const last = len - 1;
+    return switch (key) {
+        .right => @min(selected + 1, last),
+        .left => selected -| 1,
+        .down => @min(selected + cols, last),
+        .up => selected -| cols,
+        else => selected,
+    };
+}
+
+/// Pad `name` with spaces out to `col_width` display columns (counted in
+/// codepoints, matching `gridCols`'s width math), then append it to `out`.
+fn appendPadded(out: *std.ArrayList(u8), alloc: Allocator, name: []const u8, col_width: usize) Error!void {
+    try out.appendSlice(alloc, name);
+    const len = std.unicode.utf8CountCodepoints(name) catch name.len;
+    var pad = col_width -| len;
+    while (pad > 0) : (pad -= 1) try out.append(alloc, ' ');
+}
+
+/// One row of the directory grid: `cols` names starting at `page_start + row
+/// * cols`, marking `selected` with a leading `>` (` ` otherwise). Stops
+/// early once `names` runs out, matching `render_directory_row`
+/// (`rust/src/screen.rs:224`).
+fn renderDirectoryRow(
+    out: *std.ArrayList(u8),
+    alloc: Allocator,
+    names: []const []const u8,
+    page_start: usize,
+    row: usize,
+    cols: usize,
+    col_width: usize,
+    selected: usize,
+) Error!void {
+    var col: usize = 0;
+    while (col < cols) : (col += 1) {
+        const i = page_start + row * cols + col;
+        if (i >= names.len) break;
+        try out.append(alloc, if (i == selected) '>' else ' ');
+        try appendPadded(out, alloc, names[i], col_width);
+    }
+}
+
+/// Render one page of the directory grid: the `rows` of `cols`-wide entries
+/// around `selected`, marking it with a leading `>` (there's no text styling
+/// in this `Screen` interface to highlight it another way). Paging is
+/// implicit — the page follows `selected`, so scrolling the selection past
+/// the visible rows brings the next page's worth of names into view. Analog
+/// of `render_directory_page` (`rust/src/screen.rs:217`); rows are `'\n'`-
+/// joined into `out` (rather than returned as a `Vec<String>`), matching
+/// `renderTextArea`'s convention so callers reuse the same row-splitting code.
+pub fn renderDirectoryPage(
+    out: *std.ArrayList(u8),
+    alloc: Allocator,
+    names: []const []const u8,
+    selected: usize,
+    rows: usize,
+    view_columns: usize,
+) Error!void {
+    const cols = gridCols(names, view_columns);
+    const col_width = @max((view_columns / cols) -| 1, 1);
+    const rows_nz = @max(rows, 1);
+    const page_start = (selected / cols / rows_nz) * rows * cols;
+
+    var row: usize = 0;
+    while (row < rows) : (row += 1) {
+        if (row != 0) try out.append(alloc, '\n');
+        try renderDirectoryRow(out, alloc, names, page_start, row, cols, col_width, selected);
+    }
+}
+
 /// A test `Screen` that records everything written, so editor command flows can
 /// be asserted without a terminal (mirrors the Rust `FakeScreen`). Grows a
 /// single `ArrayList(u8)` of all `writeStr` output; `showCursor`/`moveTo` update
@@ -507,4 +597,60 @@ test "renderHeader appends active toggles" {
     const s = try testHeader(testing.allocator, .{ .filename = "FILE.TXT", .auto_indent = true, .show_hard_cr = true });
     defer testing.allocator.free(s);
     try testing.expect(std.mem.endsWith(u8, s, "AI HCR"));
+}
+
+// --- directory picker (epic 2000) ------------------------------------------
+
+test "gridCols fits as many as the width allows" {
+    // "aaaaa" (5) + 2-col gutter = 7 wide; 20 / 7 = 2 columns.
+    const n = [_][]const u8{ "aaaaa", "b" };
+    try testing.expectEqual(@as(usize, 2), gridCols(&n, 20));
+}
+
+test "gridCols never goes below one" {
+    const n = [_][]const u8{"a-very-long-filename-indeed"};
+    try testing.expectEqual(@as(usize, 1), gridCols(&n, 10));
+}
+
+test "moveSelection steps by one row of cols" {
+    try testing.expectEqual(@as(usize, 1), moveSelection(0, 10, 3, .right));
+    try testing.expectEqual(@as(usize, 0), moveSelection(1, 10, 3, .left));
+    try testing.expectEqual(@as(usize, 3), moveSelection(0, 10, 3, .down));
+    try testing.expectEqual(@as(usize, 0), moveSelection(3, 10, 3, .up));
+}
+
+test "moveSelection clamps at the ends" {
+    try testing.expectEqual(@as(usize, 0), moveSelection(0, 5, 3, .left));
+    try testing.expectEqual(@as(usize, 0), moveSelection(0, 5, 3, .up));
+    try testing.expectEqual(@as(usize, 4), moveSelection(4, 5, 3, .right)); // last row is ragged
+    try testing.expectEqual(@as(usize, 4), moveSelection(4, 5, 3, .down));
+}
+
+test "renderDirectoryPage marks the selection" {
+    const n = [_][]const u8{ "one.txt", "two.txt", "three.txt", "four.txt" };
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(testing.allocator);
+    try renderDirectoryPage(&out, testing.allocator, &n, 1, 2, 40);
+    var rows = std.mem.splitScalar(u8, out.items, '\n');
+    // cols=3 at this width, so row 0 holds one/two/three and row 1 holds
+    // just four (the fourth name wraps to the next grid row).
+    const row0 = rows.next().?;
+    const row1 = rows.next().?;
+    try testing.expect(std.mem.startsWith(u8, row0, " one.txt"));
+    try testing.expect(std.mem.indexOf(u8, row0, ">two.txt") != null);
+    try testing.expect(std.mem.startsWith(u8, row1, " four.txt"));
+}
+
+test "renderDirectoryPage scrolls to follow selection" {
+    const n = [_][]const u8{ "a", "b", "c", "d", "e", "f" };
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(testing.allocator);
+    // rows=2, cols=1 (forced by a narrow width) -> pages are [a,b] [c,d] [e,f];
+    // selecting index 4 ("e") should show page ["e", "f"], not page one.
+    try renderDirectoryPage(&out, testing.allocator, &n, 4, 2, 3);
+    var rows = std.mem.splitScalar(u8, out.items, '\n');
+    const row0 = std.mem.trim(u8, rows.next().?, " ");
+    const row1 = std.mem.trim(u8, rows.next().?, " ");
+    try testing.expectEqualStrings(">e", row0);
+    try testing.expectEqualStrings("f", row1);
 }
