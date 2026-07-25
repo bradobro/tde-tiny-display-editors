@@ -126,6 +126,33 @@ pub fn save(editor: *Editor) !void {
     editor.modified = false;
 }
 
+/// Write the marked block's text to `path` (`^KW` = `Write`, `zde17.asm:4943`).
+/// Errors if no block is marked, matching the ASM's `Error7` ("must be
+/// marked") check that gates every block command.
+pub fn writeBlock(editor: *Editor, path: []const u8) !void {
+    const span = editor.block.span() orelse return error.NoBlockMarked;
+    const dir = std.Io.Dir.cwd();
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(editor.alloc);
+    var enc: [4]u8 = undefined;
+    var i = span.lo;
+    while (i < span.hi) : (i += 1) {
+        const n = try std.unicode.utf8Encode(editor.buffer.charAt(i).?, &enc);
+        try out.appendSlice(editor.alloc, enc[0..n]);
+    }
+    try dir.writeFile(io(), .{ .sub_path = path, .data = out.items });
+}
+
+/// Read `path`'s contents in at the cursor (`^KR` = `Read`, `zde17.asm:4871`).
+/// A missing file is an error here (unlike `loadInto`'s "new file" leniency)
+/// since there's no sensible "insert nothing" fallback the user asked for.
+pub fn readFileAtCursor(editor: *Editor, path: []const u8) !void {
+    const codepoints = (try readFile(editor.alloc, path)) orelse return error.FileNotFound;
+    defer editor.alloc.free(codepoints);
+    for (codepoints) |c| try editor.insertChar(c);
+    if (codepoints.len > 0) editor.modified = true;
+}
+
 // --- tests ---------------------------------------------------------------
 
 const testing = std.testing;

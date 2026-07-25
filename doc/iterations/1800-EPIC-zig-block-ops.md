@@ -1,6 +1,6 @@
 # Epic 1800 — Block operations (Zig)
 
-Status: ready
+Status: done
 
 ## Goal
 
@@ -19,7 +19,7 @@ region — built on the already-implemented `block.zig` offset math.
 
 ## Iterations
 
-- [[doc/iterations/1801-iter-block-ops]]
+- [[doc/iterations/completed/1801-iter-block-ops]]
 
 ## Exit criteria
 

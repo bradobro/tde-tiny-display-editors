@@ -347,8 +347,8 @@ pub const Editor = struct {
                 'C' => self.cmdCopyBlock(),
                 'V' => self.cmdMoveBlock(),
                 'Y' => self.cmdEraseBlock(),
-                'R' => self.cmdUnsupported("read file at cursor"), // epic 1800
-                'W' => self.cmdUnsupported("write block to file"), // epic 1800
+                'R' => self.cmdReadFileAtCursor(keys, screen),
+                'W' => self.cmdWriteBlock(keys, screen),
                 'L' => self.cmdLoad(keys, screen),
                 'S' => self.cmdSave(),
                 'N' => self.cmdChangeName(keys, screen),
@@ -423,7 +423,9 @@ pub const Editor = struct {
     /// Insert `c` at the cursor. Every insertion goes through here (rather
     /// than `self.buffer.insertChar` directly) so the marked block's
     /// endpoints (`self.block`) stay correct as text shifts around them.
-    fn insertChar(self: *Self, c: u21) !void {
+    /// `pub` so `filesystem.zig`'s `readFileAtCursor` (`^KR`) gets the same
+    /// block-offset fixup as every other insert (Rust's `pub(crate)`).
+    pub fn insertChar(self: *Self, c: u21) !void {
         const at = self.buffer.cursor();
         try self.buffer.insertChar(c);
         self.block.adjustInsert(at, 1);
@@ -1282,6 +1284,32 @@ pub const Editor = struct {
         return .cont;
     }
 
+    /// Write the marked block's text to a file (`^K W` = `Write`,
+    /// `zde17.asm:4943`).
+    fn cmdWriteBlock(self: *Self, keys: KeySource, screen: Screen) !CommandResult {
+        const path = (try self.readPathLine(screen, keys, "Write block to: ")) orelse return .cont;
+        defer self.alloc.free(path);
+        filesystem.writeBlock(self, path) catch |err| {
+            const detail = if (err == error.NoBlockMarked) "no block marked" else @errorName(err);
+            try self.setMessage("write failed: {s}", .{detail});
+            return .cont;
+        };
+        try self.setMessage("block written", .{});
+        return .cont;
+    }
+
+    /// Read a file's contents in at the cursor (`^K R` = `Read`,
+    /// `zde17.asm:4871`).
+    fn cmdReadFileAtCursor(self: *Self, keys: KeySource, screen: Screen) !CommandResult {
+        const path = (try self.readPathLine(screen, keys, "Read file: ")) orelse return .cont;
+        defer self.alloc.free(path);
+        filesystem.readFileAtCursor(self, path) catch |err| {
+            const detail = if (err == error.FileNotFound) "file not found" else @errorName(err);
+            try self.setMessage("read failed: {s}", .{detail});
+        };
+        return .cont;
+    }
+
     /// Quit, confirming first if there are unsaved changes (`^K Q` = `Quit`,
     /// `zde17.asm:720`). Never saves.
     fn cmdQuit(self: *Self, keys: KeySource, screen: Screen) !CommandResult {
@@ -2102,4 +2130,54 @@ test "backward find searches from just before the cursor" {
     var sk = ScriptedKeys.init(&keysFor("brown"));
     _ = try ed.cmdFind(sk.source(), fake.screen());
     try testing.expectEqual(@as(usize, 11), ed.buffer.cursor());
+}
+
+// --- block ops: write/read at cursor (epic 1800) --------------------------
+
+test "write block emits exactly the marked text" {
+    const tmp = try TempPath.init(testing.allocator, "write-block");
+    defer tmp.deinit();
+
+    var ed = try editorWith(testing.allocator, "abc def ghi", 4);
+    defer ed.deinit();
+    _ = ed.cmdMarkBlockStart();
+    ed.buffer.moveTo(7);
+    _ = ed.cmdMarkBlockEnd();
+
+    var fake = FakeScreen.init(testing.allocator);
+    defer fake.deinit();
+    var script: std.ArrayList(Key) = .empty;
+    defer script.deinit(testing.allocator);
+    try appendPromptAnswer(&script, testing.allocator, tmp.path);
+    var sk = ScriptedKeys.init(script.items);
+    _ = try ed.cmdWriteBlock(sk.source(), fake.screen());
+
+    const written = (try filesystem.readFile(testing.allocator, tmp.path)).?;
+    defer testing.allocator.free(written);
+    const written_text = try codepointsToUtf8(testing.allocator, written);
+    defer testing.allocator.free(written_text);
+    try testing.expectEqualStrings("def", written_text);
+    try testing.expect(std.mem.indexOf(u8, ed.message.?, "block written") != null);
+}
+
+test "read file at cursor inserts the file's contents" {
+    const tmp = try TempPath.init(testing.allocator, "read-file");
+    defer tmp.deinit();
+    var seed = try GapBuffer.fromStr(testing.allocator, "XYZ");
+    defer seed.deinit();
+    try filesystem.writeFile(testing.allocator, tmp.path, seed, false);
+
+    var ed = try editorWith(testing.allocator, "ab", 1);
+    defer ed.deinit();
+    var fake = FakeScreen.init(testing.allocator);
+    defer fake.deinit();
+    var script: std.ArrayList(Key) = .empty;
+    defer script.deinit(testing.allocator);
+    try appendPromptAnswer(&script, testing.allocator, tmp.path);
+    var sk = ScriptedKeys.init(script.items);
+    _ = try ed.cmdReadFileAtCursor(sk.source(), fake.screen());
+
+    const text = try bufferText(&ed);
+    defer testing.allocator.free(text);
+    try testing.expectEqualStrings("aXYZb", text);
 }
